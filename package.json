@@ -1,0 +1,27 @@
+{
+  "name": "webpp",
+  "version": "1.0.0",
+  "description": "A lightweight preprocessor for web projects",
+  "main": "bin/webpp.js",
+  "bin": {
+    "webpp": "bin/webpp.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greencoder001/webpp.git"
+  },
+  "keywords": [
+    "webpp",
+    "web",
+    "preprocessor"
+  ],
+  "author": "greencoder001 <greencoder001@outlook.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/greencoder001/webpp/issues"
+  },
+  "homepage": "https://github.com/greencoder001/webpp#readme"
+}

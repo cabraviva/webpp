@@ -1,3 +1,6 @@
+# Snyk
+.dccache
+
 # Logs
 logs
 *.log
