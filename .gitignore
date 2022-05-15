@@ -1,6 +1,9 @@
 # Snyk
 .dccache
 
+# Playground
+playground
+
 # Logs
 logs
 *.log
