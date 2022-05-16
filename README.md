@@ -13,7 +13,7 @@ A lightweight preprocessor for web projects
 - [X] Don't link your stylesheets and scripts to your html, they are already included
 - [ ] Use components in your HTML
 - [ ] Automatically remove style attributes from your html and bundle them into a single file
-- [ ] Bundle your inline stylesheets and scripts into a single file
+- [X] Bundle your inline stylesheets and scripts into a single file
 
 # Project Structure
 

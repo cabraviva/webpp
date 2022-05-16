@@ -177,6 +177,56 @@ async function compilePage (pagePath, parent) {
         givenTitle.remove()
     }
 
+    // Get style emlements & remove every style element from content
+    for (const styleElem of document.querySelectorAll('style')) {
+        css += `
+        /* Beginning of an inline style element which was added to head at ${new Date()} */
+        ${styleElem.innerHTML}
+        /* End of an inline style element */
+        `
+        styleElem.remove()
+    }
+
+    // Get script elements & remove every script element from content
+    for (const scriptElem of document.querySelectorAll('script')) {
+        // If the script has no src attribute, it is inline
+        if (!scriptElem.hasAttribute('src')) {
+            js += `
+            /* Beginning of an inline script element which was added to head at ${new Date()} */
+            ${scriptElem.innerHTML}
+            /* End of an inline script element */
+            `
+
+            scriptElem.remove()
+        } else {
+            // If the script has a src attribute, it is external
+            const src = scriptElem.getAttribute('src')
+            if (src.endsWith('.ts')) {
+                js += `
+                /* Beginning of an external script element which was added to head at ${new Date()} */
+                ;(function m(){
+
+                ${await fs.promises.readFile(path.join(pagePath, src), 'utf8')}
+
+                })();
+                /* End of an external script element */
+                `
+            } else {
+                js += `
+                /* Beginning of an external script element which was added to head at ${new Date()} */
+                ;(function m(){
+
+                ${await fs.promises.readFile(path.join(pagePath, src), 'utf8')}
+
+                })();
+                /* End of an external script element */
+                `
+            }
+
+            scriptElem.remove()
+        }
+    }
+
     // Assign content to html from Virtual DOM
     content = document.body.innerHTML
     let shouldBeInHead = document.head.innerHTML
@@ -190,8 +240,11 @@ async function compilePage (pagePath, parent) {
         <script defer src="${pageIdentifier}.js"></script>`
     }
 
+    // Add jsContent to js
+    js += jsContent
+
     // Merge mjs and js
-    js = mjs + jsContent
+    js = mjs + js
 
     // Minify js
     js = minifyHTML(`<script>${js}</script>`, {
