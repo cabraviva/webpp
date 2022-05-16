@@ -7,7 +7,7 @@ A lightweight preprocessor for web projects
 - [ ] Auto compiling .sass, .scss & .ts
 - [ ] Add npm modules, frameworks and stylesheets to your page with a simple syntax
 - [X] Bundle all your files into one stylesheet, script and html file
-- [ ] Don't ever worry about waiting for the DOM to load again
+- [X] Don't ever worry about waiting for the DOM to load again
 - [ ] Use babel to transpile your code
 - [ ] Use browserify to bundle your code
 - [X] Don't link your stylesheets and scripts to your html, they are already included

@@ -2,7 +2,32 @@ const path = require('path')
 const fs = require('fs')
 const YAML = require('yaml')
 const minifyHTML = require('html-minifier').minify
+const axios = require('axios')
 const { JSDOM } = require('jsdom')
+
+async function resolveLibrary (libname, projectdir, pagedir, parent) {
+    // If we try to resolve a library we use this steps:
+
+    // 1. Search for the library in the registry
+    const libRegistry = (await axios.get('https://raw.githubusercontent.com/greencoder001/webpp-lib/main/libs.json')).data
+    const lib = libRegistry[libname.toLowerCase()]
+    if (lib) {
+        // 1.1. If the library is found, follow the steps
+        for (const step of lib) {
+            // 1.1.1. If the step type is FETCH_JS use parent.fetchJs()
+            if (step.type === 'FETCH_JS') return parent.fetchJs(step.value)
+
+            // 1.1.2. If the step type is FETCH_CSS use parent.fetchCss()
+            if (step.type === 'FETCH_CSS') return parent.fetchCss(step.value)
+
+            // 1.1.3. If the step type is WRITE_HEAD use parent.addHead()
+            if (step.type === 'WRITE_HEAD') return parent.addHead(step.value)
+
+            // UNKNOWN STEP TYPE
+            throw new Error(`Unknown step type: ${step.type}`)
+        }
+    }
+}
 
 async function isWebppFolder (filepath, webppFolders) {
     const stat = await fs.promises.stat(filepath)
@@ -60,7 +85,42 @@ async function compilePage (pagePath, parent) {
     manifest = YAML.parse(manifest)
     if (typeof manifest !== 'object') throw new Error(`Invalid manifest in ${pagePath}`)
     if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
-    const singleFile = manifest.singleFile || false 
+    const singleFile = manifest.singleFile || false
+
+    // Embed libraries
+    let libHead = ''
+    let mjs = ''
+    for (const lib of manifest.use) {
+        await resolveLibrary(lib, pagePath, pagePath, {
+            fetchJs: async (url) => {
+                const response = await axios.get(url)
+                mjs += `
+                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                ;(function m(){
+
+                ${response.data}
+
+                })();
+                /* End of ${lib} */
+                `
+            },
+            fetchCss: async (url) => {
+                const response = await axios.get(url)
+                css += `
+                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                ${response.data}
+                /* End of ${lib} */
+                `
+            },
+            addHead: (htmlToWriteToHead) => {
+                libHead += `
+                <!-- Beginning of ${lib} which was added to head at ${new Date()} -->
+                ${htmlToWriteToHead}
+                <!-- End of ${lib} -->
+                `
+            }
+        })
+    }
 
     // Create Virtual DOM from content
     const dom = new JSDOM(content)
@@ -80,11 +140,21 @@ async function compilePage (pagePath, parent) {
     // Set externalfile html
     let externalFileHTML = ''
     if (singleFile) {
-        externalFileHTML = `<style>${cssContent}</style><script>${jsContent}</script>`
+        externalFileHTML = `<style>${cssContent}</style><script defer>${jsContent}</script>`
     } else {
         externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-        <script src="${pageIdentifier}.js"></script>`
+        <script defer src="${pageIdentifier}.js"></script>`
     }
+
+    // Merge mjs and js
+    js = mjs + jsContent
+
+    // Minify js
+    js = minifyHTML(`<script>${js}</script>`, {
+        collapseWhitespace: true,
+        minifyJS: true
+    })
+    js = js.substring(8, js.length - 9)
 
     // Add cssContent to css
     css += cssContent
@@ -109,6 +179,9 @@ async function compilePage (pagePath, parent) {
 
         <!-- Head from Virtual DOM -->
         ${shouldBeInHead}
+
+        <!-- Embedded libraries -->
+        ${libHead}
     </head>
     <body>
         ${content}
