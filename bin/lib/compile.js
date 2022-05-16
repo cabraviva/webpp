@@ -3,7 +3,20 @@ const fs = require('fs')
 const YAML = require('yaml')
 const minifyHTML = require('html-minifier').minify
 const axios = require('axios')
+const chalk = require('chalk')
+const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
+
+function scopeStyle (css, id) {
+    css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
+        // Add the prefix to the selector
+        selector = `#${id} ${selector} {`
+
+        return selector
+    })
+
+    return css
+}
 
 async function resolveLibrary (libname, projectdir, pagedir, parent) {
     // If we try to resolve a library we use this steps:
@@ -76,7 +89,38 @@ async function getWebppFolders (projectdir) {
     return webppFolders
 }
 
-async function compilePage (pagePath, parent) {
+function parseProps (propsStr) {
+    propsStr = propsStr.trim()
+
+    const HELPER = '__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu$IJUHjiehuikajhujaikju____'
+
+    // PROPS FORMAT: key="value" key2="value2" key3='value3'
+
+    propsStr = propsStr.replace(/"(.*?)"/g, function (match, $inl) {
+        return `"${$inl.replace(/\s/g, HELPER)}"`
+    })
+
+    propsStr = propsStr.replace(/'(.*?)'/g, function (match, $inl) {
+        return `"${$inl.replace(/\s/g, HELPER)}"`
+    })
+
+    const props = {}
+    const propsArr = propsStr.split(' ')
+    for (const prop of propsArr) {
+        const propArr = prop.split('=')
+        if (propArr.length === 2) {
+            props[propArr[0].trim()] = propArr[1].replace(/__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu\$IJUHjiehuikajhujaikju____/g, ' ').trim()
+            props[propArr[0].trim()] = props[propArr[0].trim()].substring(1, props[propArr[0].trim()].length - 1)
+        } else {
+            props[propArr[0].trim()] = propArr.slice(1).join('=').replace(/__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu\$IJUHjiehuikajhujaikju____/g, ' ').trim()
+            props[propArr[0].trim()] = props[propArr[0].trim()].substring(1, props[propArr[0].trim()].length - 1)
+        }
+    }
+
+    return props
+}
+
+async function compilePage (pagePath, parent, projectdir) {
     // Paths
     const pageName = pagePath.substring(0, pagePath.length - 6)
     const pageIdentifier = pageName.replace(/\\/g, '/').substring(pageName.replace(/\\/g, '/').lastIndexOf('/') + 1)
@@ -114,7 +158,7 @@ async function compilePage (pagePath, parent) {
     let libHead = ''
     let mjs = ''
     for (const lib of manifest.use) {
-        await resolveLibrary(lib, pagePath, pagePath, {
+        await resolveLibrary(lib, projectdir, pagePath, {
             fetchJs: async (url) => {
                 const response = await axios.get(url)
                 mjs += `
@@ -165,6 +209,74 @@ async function compilePage (pagePath, parent) {
             }
         })
     }
+
+    // Render components
+    // Components are saved in the @Components folder in the projectdir
+    content = content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
+        const componentName = inlineComponent.split(' ')[0]
+        const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
+        const componentPath = path.join(projectdir, '@Components', componentName + '.html')
+
+        // Parse props
+        const componentProps = parseProps(componentPropsString)
+
+        if (!fs.existsSync(componentPath)) {
+            // Component not found
+            console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
+            return match
+        }
+
+        // Read component file
+        let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
+
+        // Create Virtual DOM from component
+        const componentDOM = new JSDOM(componentContent)
+
+        // Assign a component id
+        const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
+
+        // Get template
+        let template = componentDOM.window.document.querySelector('template').innerHTML
+
+        // Replace #({ PROP }) in the template with props
+        template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+            propKey = propKey.trim()
+
+            return componentProps[propKey]
+        })
+
+        // Get style
+        let style = componentDOM.window.document.querySelector('style').innerHTML
+
+        // Replace #({ PROP }) in the style with props
+        style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+            propKey = propKey.trim()
+
+            return componentProps[propKey]
+        })
+
+        // Scope the style
+        style = scopeStyle(style, componentId)
+
+        // Add the style to the css
+        css += `
+        /* Beginning of styles for the ${componentName} component */
+        ${style}
+        /* End of styles for the ${componentName} component */
+        `
+
+        // TODO: Parse JS
+        // TODO: Make `Component` point to `__MountedWebPPComponents__[componentId]`
+        // TODO: Parse libs
+
+        let componentHTML = `
+            <div id="${componentId}">
+                ${template}
+            </div>
+        `
+
+        return componentHTML
+    })
 
     // Create Virtual DOM from content
     const dom = new JSDOM(content)
@@ -325,7 +437,7 @@ async function compile (argvString) {
 
     // Compile every single page
     for (const webppFile of webppFolders) {
-        await compilePage(webppFile, parent)
+        await compilePage(webppFile, parent, projectdir)
     }
 
     // Write global files
