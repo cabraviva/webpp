@@ -27,6 +27,29 @@ async function resolveLibrary (libname, projectdir, pagedir, parent) {
             throw new Error(`Unknown step type: ${step.type}`)
         }
     }
+
+    // 2. Check if there's an npm package with the name
+    try {
+        const npmResp = (await axios.get(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)).data
+        if (npmResp.trim() === 'Failed to resolve the requested file.') {
+            // npm package not found
+        } else {
+            // npm package found
+            // Add as fetchJs
+            return parent.fetchJs(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)
+        }
+    } catch {
+        // npm package not found
+    }
+
+    // 3. Try to make a web request to the library
+    try {
+        const resp = (await axios.get(libname.trim())).data
+        return parent.fetchAndDetectType(libname.trim())
+    }
+    catch {
+        // Library not found
+    }
 }
 
 async function isWebppFolder (filepath, webppFolders) {
@@ -111,6 +134,27 @@ async function compilePage (pagePath, parent) {
                 ${response.data}
                 /* End of ${lib} */
                 `
+            },
+            fetchAndDetectType: async (url) => {
+                const response = await axios.get(url)
+                const type = response.headers['content-type'] === 'text/css' ? 'css' : 'js'
+                if (type === 'js') {
+                    mjs += `
+                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                    ;(function m(){
+
+                    ${response.data}
+
+                    })();
+                    /* End of ${lib} */
+                    `
+                } else if (type === 'css') {
+                    css += `
+                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                    ${response.data}
+                    /* End of ${lib} */
+                    `
+                }
             },
             addHead: (htmlToWriteToHead) => {
                 libHead += `
