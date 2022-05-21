@@ -122,6 +122,14 @@ function parseProps (propsStr) {
     return props
 }
 
+function stringifyProps (propsObj) {
+    const propsArr = []
+    for (const prop in propsObj) {
+        propsArr.push(`${prop}="${propsObj[prop]}"`)
+    }
+    return propsArr.join(' ')
+}
+
 async function compilePage (pagePath, parent, projectdir) {
     // Paths
     const pageName = pagePath.substring(0, pagePath.length - 6)
@@ -183,6 +191,9 @@ async function compilePage (pagePath, parent, projectdir) {
             const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
             const componentPath = path.join(projectdir, '@Components', componentName + '.html')
 
+            // Assign a component id
+            const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
+
             // Parse props
             const componentProps = parseProps(componentPropsString)
 
@@ -195,24 +206,30 @@ async function compilePage (pagePath, parent, projectdir) {
             // Read component file
             let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
 
+            // Define Component value in @event listeners
+            componentContent = componentContent.replace(/<(.*?) (.*?)>/g, (match, elemName, elemProps) => {
+                const elemPropsObj = parseProps(elemProps)
+                let needToReAssignProps = false
+                
+                for (const elemPropsKey of Object.keys(elemPropsObj)) {
+                    if (elemPropsKey.startsWith('@')) {
+                        elemPropsObj[elemPropsKey] = `let Component=__MountedWebPPComponents__['${componentId}'];${elemPropsObj[elemPropsKey]}`.replace(/"/g, '\'')
+                        needToReAssignProps = true
+                    }
+                }
+
+                if (needToReAssignProps) {
+                    return `<${elemName} ${stringifyProps(elemPropsObj)}>`
+                }
+
+                return match	
+            })
+
             // Parse other components
             componentContent = parseHTML_(componentContent)
 
             // Create Virtual DOM from component
             const componentDOM = new JSDOM(componentContent)
-
-            // Assign a component id
-            const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
-
-            // Get template
-            let template = componentDOM.window.document.querySelector('template').innerHTML
-
-            // Replace #({ PROP }) in the template with props
-            template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
-                propKey = propKey.trim()
-
-                return componentProps[propKey]
-            })
 
             // Get style
             let style = componentDOM.window.document.querySelector('style').innerHTML
@@ -266,6 +283,17 @@ async function compilePage (pagePath, parent, projectdir) {
             })();
             /* End of script for the ${componentName} component */
             `
+
+            // Get template
+            let template = componentDOM.window.document.querySelector('template').innerHTML
+
+            // Replace #({ PROP }) in the template with props
+            template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                propKey = propKey.trim()
+
+                return componentProps[propKey]
+            })
+
             // Parse libs
             let componentLibs = []
             if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
@@ -332,7 +360,7 @@ async function compilePage (pagePath, parent, projectdir) {
         return `
         ${vdom.window.document.querySelector('head').innerHTML}
 
-        
+
         ${vdom.window.document.querySelector('body').innerHTML}
         `
     }
@@ -478,11 +506,11 @@ async function compilePage (pagePath, parent, projectdir) {
     js = mjs + js
 
     // Minify js
-    js = minifyHTML(`<script>${js}</script>`, {
+    /*js = minifyHTML(`<script>${js}</script>`, {
         collapseWhitespace: true,
         minifyJS: true
     })
-    js = js.substring(8, js.length - 9)
+    js = js.substring(8, js.length - 9)*/
 
     // Add cssContent to css
     css += cssContent
