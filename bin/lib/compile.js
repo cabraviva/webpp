@@ -131,7 +131,21 @@ async function compilePage (pagePath, parent, projectdir) {
     // Outputs
     let html = ''
     let css = ''
-    let js = ''
+    let js = `
+    ;__MountedWebPPComponents__={};
+    function __WEBPP_HELPER_mergeObjects() {
+        for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
+            objs[_key] = arguments[_key];
+        }
+
+        return objs.reduce(function (acc, obj) {
+            Object.keys(obj).forEach(function (key) {
+            acc[key] = obj[key];
+            });
+            return acc;
+        }, {});
+    }
+    `
 
     // Read files
     let manifest = ''
@@ -265,8 +279,38 @@ async function compilePage (pagePath, parent, projectdir) {
         /* End of styles for the ${componentName} component */
         `
 
-        // TODO: Parse JS
-        // TODO: Make `Component` point to `__MountedWebPPComponents__[componentId]`
+        let jsFromDom = componentDOM.window.document.querySelector('script').innerHTML
+        let sjs = `
+        /* Beginning of script for the ${componentName} component */
+        ;(function _() {
+            // Add component to __MountedWebPPComponents__
+            ;__MountedWebPPComponents__["${componentId}"] = ${JSON.stringify({
+                id: componentId,
+                name: componentName,
+                props: componentProps
+            })};
+            ;__MountedWebPPComponents__["${componentId}"].element=document.querySelector("#${componentId}");
+            ;__MountedWebPPComponents__["${componentId}"].querySelector=function querySelector(selector){
+                return document.querySelector("#${componentId}").querySelector(selector);
+            };
+            ;__MountedWebPPComponents__["${componentId}"].querySelectorAll=function querySelectorAll(selector){
+                return document.querySelector("#${componentId}").querySelectorAll(selector);
+            };
+            ;__MountedWebPPComponents__["${componentId}"].$=__MountedWebPPComponents__["${componentId}"].querySelector;
+            ;__MountedWebPPComponents__["${componentId}"].$$=__MountedWebPPComponents__["${componentId}"].querySelectorAll;
+            ;__MountedWebPPComponents__["${componentId}"].define=function define(obj){
+                ;__MountedWebPPComponents__["${componentId}"]=__WEBPP_HELPER_mergeObjects(__MountedWebPPComponents__["${componentId}"],obj);
+                ;__MountedWebPPComponents__["${componentId}"].mounted();
+            };
+
+            // Make Component variable available
+            ;let Component=__MountedWebPPComponents__["${componentId}"];
+
+            // Real JS
+            ;${jsFromDom};
+        })();
+        /* End of script for the ${componentName} component */
+        `
         // TODO: Parse libs
 
         let componentHTML = `
@@ -275,6 +319,7 @@ async function compilePage (pagePath, parent, projectdir) {
             </div>
         `
 
+        js += sjs
         return componentHTML
     })
 
