@@ -492,12 +492,6 @@ async function compilePage (pagePath, parent, projectdir) {
 
     // Set externalfile html
     let externalFileHTML = ''
-    if (singleFile) {
-        externalFileHTML = `<style>${cssContent}</style><script defer>${jsContent}</script>`
-    } else {
-        externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-        <script defer src="${pageIdentifier}.js"></script>`
-    }
 
     // Add jsContent to js
     js += jsContent
@@ -520,6 +514,14 @@ async function compilePage (pagePath, parent, projectdir) {
         collapseWhitespace: true,
         minifyCSS: true
     }).replace('<style>', '').replace('</style>', '')
+
+    // Singlefile
+    if (singleFile) {
+        externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
+    } else {
+        externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
+        <script defer src="${pageIdentifier}.js"></script>`
+    }
 
     // Create HTML
     html = `
