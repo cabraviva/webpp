@@ -11,8 +11,10 @@ A lightweight preprocessor for web projects
 - [ ] Use babel to transpile your code
 - [ ] Use browserify to bundle your code
 - [X] Don't link your stylesheets and scripts to your html, they are already included
-- [ ] Use components in your HTML
+- [X] Use components in your HTML
 - [X] Bundle your inline stylesheets and scripts into a single file
+- [ ] Use vue like reactivity
+- [ ] Use @event in your HTML to listen to events
 
 # Project Structure
 

@@ -177,108 +177,116 @@ async function compilePage (pagePath, parent, projectdir) {
 
     // Render components
     // Components are saved in the @Components folder in the projectdir
-    content = content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
-        const componentName = inlineComponent.split(' ')[0]
-        const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
-        const componentPath = path.join(projectdir, '@Components', componentName + '.html')
+    function parseComponents ($content) {
+        return $content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
+            const componentName = inlineComponent.split(' ')[0]
+            const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
+            const componentPath = path.join(projectdir, '@Components', componentName + '.html')
 
-        // Parse props
-        const componentProps = parseProps(componentPropsString)
+            // Parse props
+            const componentProps = parseProps(componentPropsString)
 
-        if (!fs.existsSync(componentPath)) {
-            // Component not found
-            console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
-            return match
-        }
+            if (!fs.existsSync(componentPath)) {
+                // Component not found
+                console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
+                return match
+            }
 
-        // Read component file
-        let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
+            // Read component file
+            let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
 
-        // Create Virtual DOM from component
-        const componentDOM = new JSDOM(componentContent)
+            // Parse other components
+            componentContent = parseComponents(componentContent)
 
-        // Assign a component id
-        const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
+            // Create Virtual DOM from component
+            const componentDOM = new JSDOM(componentContent)
 
-        // Get template
-        let template = componentDOM.window.document.querySelector('template').innerHTML
+            // Assign a component id
+            const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
 
-        // Replace #({ PROP }) in the template with props
-        template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
-            propKey = propKey.trim()
+            // Get template
+            let template = componentDOM.window.document.querySelector('template').innerHTML
 
-            return componentProps[propKey]
+            // Replace #({ PROP }) in the template with props
+            template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                propKey = propKey.trim()
+
+                return componentProps[propKey]
+            })
+
+            // Get style
+            let style = componentDOM.window.document.querySelector('style').innerHTML
+
+            // Replace #({ PROP }) in the style with props
+            style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                propKey = propKey.trim()
+
+                return componentProps[propKey]
+            })
+
+            // Scope the style
+            style = scopeStyle(style, componentId)
+
+            // Add the style to the css
+            css += `
+            /* Beginning of styles for the ${componentName} component */
+            ${style}
+            /* End of styles for the ${componentName} component */
+            `
+
+            let jsFromDom = componentDOM.window.document.querySelector('script').innerHTML
+            let sjs = `
+            /* Beginning of script for the ${componentName} component */
+            ;(function _() {
+                // Add component to __MountedWebPPComponents__
+                ;__MountedWebPPComponents__["${componentId}"] = ${JSON.stringify({
+                    id: componentId,
+                    name: componentName,
+                    props: componentProps
+                })};
+                ;__MountedWebPPComponents__["${componentId}"].element=document.querySelector("#${componentId}");
+                ;__MountedWebPPComponents__["${componentId}"].querySelector=function querySelector(selector){
+                    return document.querySelector("#${componentId}").querySelector(selector);
+                };
+                ;__MountedWebPPComponents__["${componentId}"].querySelectorAll=function querySelectorAll(selector){
+                    return document.querySelector("#${componentId}").querySelectorAll(selector);
+                };
+                ;__MountedWebPPComponents__["${componentId}"].$=__MountedWebPPComponents__["${componentId}"].querySelector;
+                ;__MountedWebPPComponents__["${componentId}"].$$=__MountedWebPPComponents__["${componentId}"].querySelectorAll;
+                ;__MountedWebPPComponents__["${componentId}"].define=function define(obj){
+                    ;__MountedWebPPComponents__["${componentId}"]=__WEBPP_HELPER_mergeObjects(__MountedWebPPComponents__["${componentId}"],obj);
+                    ;__MountedWebPPComponents__["${componentId}"].mounted();
+                };
+
+                // Make Component variable available
+                ;let Component=__MountedWebPPComponents__["${componentId}"];
+
+                // Real JS
+                ;${jsFromDom};
+            })();
+            /* End of script for the ${componentName} component */
+            `
+            // Parse libs
+            let componentLibs = []
+            if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
+                componentLibs = componentDOM.window.document.querySelector('libs').innerHTML.trim().split(',').map(e => e.trim())
+            }
+            if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
+            libsToInclude = libsToInclude.concat(componentLibs)
+
+            let componentHTML = `
+                <div id="${componentId}">
+                    ${template}
+                </div>
+            `
+
+            js += sjs
+            return componentHTML
         })
+    }
 
-        // Get style
-        let style = componentDOM.window.document.querySelector('style').innerHTML
+    content = parseComponents(content)
 
-        // Replace #({ PROP }) in the style with props
-        style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
-            propKey = propKey.trim()
-
-            return componentProps[propKey]
-        })
-
-        // Scope the style
-        style = scopeStyle(style, componentId)
-
-        // Add the style to the css
-        css += `
-        /* Beginning of styles for the ${componentName} component */
-        ${style}
-        /* End of styles for the ${componentName} component */
-        `
-
-        let jsFromDom = componentDOM.window.document.querySelector('script').innerHTML
-        let sjs = `
-        /* Beginning of script for the ${componentName} component */
-        ;(function _() {
-            // Add component to __MountedWebPPComponents__
-            ;__MountedWebPPComponents__["${componentId}"] = ${JSON.stringify({
-                id: componentId,
-                name: componentName,
-                props: componentProps
-            })};
-            ;__MountedWebPPComponents__["${componentId}"].element=document.querySelector("#${componentId}");
-            ;__MountedWebPPComponents__["${componentId}"].querySelector=function querySelector(selector){
-                return document.querySelector("#${componentId}").querySelector(selector);
-            };
-            ;__MountedWebPPComponents__["${componentId}"].querySelectorAll=function querySelectorAll(selector){
-                return document.querySelector("#${componentId}").querySelectorAll(selector);
-            };
-            ;__MountedWebPPComponents__["${componentId}"].$=__MountedWebPPComponents__["${componentId}"].querySelector;
-            ;__MountedWebPPComponents__["${componentId}"].$$=__MountedWebPPComponents__["${componentId}"].querySelectorAll;
-            ;__MountedWebPPComponents__["${componentId}"].define=function define(obj){
-                ;__MountedWebPPComponents__["${componentId}"]=__WEBPP_HELPER_mergeObjects(__MountedWebPPComponents__["${componentId}"],obj);
-                ;__MountedWebPPComponents__["${componentId}"].mounted();
-            };
-
-            // Make Component variable available
-            ;let Component=__MountedWebPPComponents__["${componentId}"];
-
-            // Real JS
-            ;${jsFromDom};
-        })();
-        /* End of script for the ${componentName} component */
-        `
-        // Parse libs
-        let componentLibs = []
-        if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
-            componentLibs = componentDOM.window.document.querySelector('libs').innerHTML.trim().split(',').map(e => e.trim())
-        }
-        if (!Array.isArray(componentLibs)) componentLibs = [ componentLibs ]
-        libsToInclude = libsToInclude.concat(componentLibs)
-
-        let componentHTML = `
-            <div id="${componentId}">
-                ${template}
-            </div>
-        `
-
-        js += sjs
-        return componentHTML
-    })
 
     // Make sure every element in libs is unique & fetch libs
     libsToInclude = [...new Set(libsToInclude)]
