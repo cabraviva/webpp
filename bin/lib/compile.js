@@ -196,7 +196,7 @@ async function compilePage (pagePath, parent, projectdir) {
             let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
 
             // Parse other components
-            componentContent = parseComponents(componentContent)
+            componentContent = parseHTML_(componentContent)
 
             // Create Virtual DOM from component
             const componentDOM = new JSDOM(componentContent)
@@ -285,7 +285,59 @@ async function compilePage (pagePath, parent, projectdir) {
         })
     }
 
-    content = parseComponents(content)
+    function parseHTML_(htc) {
+        // Parse Components
+        htc = parseComponents(htc)
+
+        // Create Virtual DOM
+        const vdom = new JSDOM(htc)
+
+        // Get every element
+        const elements = vdom.window.document.querySelectorAll('*')
+
+        for (const element of elements) {
+            const attrNames = element.getAttributeNames()
+
+            for (const attrName of attrNames) {
+                // Check if attribute starts with @
+                if (attrName.startsWith('@')) {
+                    // Assign a id
+                    const uniqueElementId = `webpp-element-with-id-${uuid()}-${uuid()}`
+
+                    // Add the id to the element as [data-webpp-element-id]
+                    element.setAttribute(`data-webpp-element-id`, uniqueElementId)
+
+                    // Add js for the event listener
+                    js += `
+                    /* Begin JS for event listener ${attrName} */
+                    ;(function _(){
+                        // Get the element
+                        let __webppcelement=document.querySelector("[data-webpp-element-id='${uniqueElementId}']");
+                        // Add event listener
+                        __webppcelement.addEventListener("${attrName.substring(1)}",function(event){
+                            ;${element.getAttribute(attrName)};
+                        });
+                    })();
+                    /* End JS for event listener ${attrName} */
+                    `
+
+                    // Remove the attribute
+                    element.removeAttribute(attrName)
+
+                }
+            }
+        }
+
+        // Create html from DOM
+        return `
+        ${vdom.window.document.querySelector('head').innerHTML}
+
+        
+        ${vdom.window.document.querySelector('body').innerHTML}
+        `
+    }
+
+    content = parseHTML_(content)
 
 
     // Make sure every element in libs is unique & fetch libs

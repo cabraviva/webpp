@@ -14,7 +14,7 @@ A lightweight preprocessor for web projects
 - [X] Use components in your HTML
 - [X] Bundle your inline stylesheets and scripts into a single file
 - [ ] Use vue like reactivity
-- [ ] Use @event in your HTML to listen to events
+- [X] Use @event in your HTML to listen to events
 
 # Project Structure
 
