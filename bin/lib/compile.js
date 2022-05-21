@@ -63,6 +63,8 @@ async function resolveLibrary (libname, projectdir, pagedir, parent) {
     catch {
         // Library not found
     }
+
+    console.log(chalk.yellow('Warning: ') + `Library ${libname} not found`)
 }
 
 async function isWebppFolder (filepath, webppFolders) {
@@ -171,58 +173,7 @@ async function compilePage (pagePath, parent, projectdir) {
     // Embed libraries
     let libHead = ''
     let mjs = ''
-    for (const lib of manifest.use) {
-        await resolveLibrary(lib, projectdir, pagePath, {
-            fetchJs: async (url) => {
-                const response = await axios.get(url)
-                mjs += `
-                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ;(function m(){
-
-                ${response.data}
-
-                })();
-                /* End of ${lib} */
-                `
-            },
-            fetchCss: async (url) => {
-                const response = await axios.get(url)
-                css += `
-                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ${response.data}
-                /* End of ${lib} */
-                `
-            },
-            fetchAndDetectType: async (url) => {
-                const response = await axios.get(url)
-                const type = response.headers['content-type'] === 'text/css' ? 'css' : 'js'
-                if (type === 'js') {
-                    mjs += `
-                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                    ;(function m(){
-
-                    ${response.data}
-
-                    })();
-                    /* End of ${lib} */
-                    `
-                } else if (type === 'css') {
-                    css += `
-                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                    ${response.data}
-                    /* End of ${lib} */
-                    `
-                }
-            },
-            addHead: (htmlToWriteToHead) => {
-                libHead += `
-                <!-- Beginning of ${lib} which was added to head at ${new Date()} -->
-                ${htmlToWriteToHead}
-                <!-- End of ${lib} -->
-                `
-            }
-        })
-    }
+    let libsToInclude = manifest.use || []
 
     // Render components
     // Components are saved in the @Components folder in the projectdir
@@ -311,7 +262,13 @@ async function compilePage (pagePath, parent, projectdir) {
         })();
         /* End of script for the ${componentName} component */
         `
-        // TODO: Parse libs
+        // Parse libs
+        let componentLibs = []
+        if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
+            componentLibs = componentDOM.window.document.querySelector('libs').innerHTML.trim().split(',').map(e => e.trim())
+        }
+        if (!Array.isArray(componentLibs)) componentLibs = [ componentLibs ]
+        libsToInclude = libsToInclude.concat(componentLibs)
 
         let componentHTML = `
             <div id="${componentId}">
@@ -322,6 +279,63 @@ async function compilePage (pagePath, parent, projectdir) {
         js += sjs
         return componentHTML
     })
+
+    // Make sure every element in libs is unique & fetch libs
+    libsToInclude = [...new Set(libsToInclude)]
+    for (let lib of libsToInclude) {
+        lib = `${lib}`.trim()
+
+        await resolveLibrary(lib, projectdir, pagePath, {
+            fetchJs: async (url) => {
+                const response = await axios.get(url)
+                mjs += `
+                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                ;(function m(){
+
+                ${response.data}
+
+                })();
+                /* End of ${lib} */
+                `
+            },
+            fetchCss: async (url) => {
+                const response = await axios.get(url)
+                css += `
+                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                ${response.data}
+                /* End of ${lib} */
+                `
+            },
+            fetchAndDetectType: async (url) => {
+                const response = await axios.get(url)
+                const type = response.headers['content-type'] === 'text/css' ? 'css' : 'js'
+                if (type === 'js') {
+                    mjs += `
+                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                    ;(function m(){
+
+                    ${response.data}
+
+                    })();
+                    /* End of ${lib} */
+                    `
+                } else if (type === 'css') {
+                    css += `
+                    /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                    ${response.data}
+                    /* End of ${lib} */
+                    `
+                }
+            },
+            addHead: (htmlToWriteToHead) => {
+                libHead += `
+                <!-- Beginning of ${lib} which was added to head at ${new Date()} -->
+                ${htmlToWriteToHead}
+                <!-- End of ${lib} -->
+                `
+            }
+        })
+    }
 
     // Create Virtual DOM from content
     const dom = new JSDOM(content)
