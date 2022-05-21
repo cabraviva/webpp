@@ -506,11 +506,11 @@ async function compilePage (pagePath, parent, projectdir) {
     js = mjs + js
 
     // Minify js
-    /*js = minifyHTML(`<script>${js}</script>`, {
+    js = minifyHTML(`<script>${js}</script>`, {
         collapseWhitespace: true,
         minifyJS: true
     })
-    js = js.substring(8, js.length - 9)*/
+    js = js.substring(8, js.length - 9)
 
     // Add cssContent to css
     css += cssContent
