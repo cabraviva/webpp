@@ -10,6 +10,98 @@ const command = (args[0] || '').trim()
 const argv = args.slice(1)
 const argStr = argv.join(' ').trim() + ' '
 
+async function useWatcher (firstCompileCallback = () => {}) {
+    const argvString = argv.join(' ').trim()
+    const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
+
+    let isFirstCompilation = true
+
+    const watcher = chokidar.watch(projectdir, {
+        ignored: /(^|[\/\\])\../,
+        persistent: true
+    })
+
+    watcher.on('ready', () => {
+        console.log(chalk.cyan('Watching for changes...'))
+    })
+
+    watcher.on('change', async (path) => {
+        // Return if file doesn't include '.webpp'
+        if (!path.includes('.webpp')) return
+
+        await compile(argvString, { dev: true }, [path])
+
+        if (isFirstCompilation) {
+            isFirstCompilation = false
+            firstCompileCallback()
+        }
+    })
+
+    watcher.on('unlink', async (path) => {
+        // Return if file doesn't include '.webpp'
+        if (!path.includes('.webpp')) return
+
+        await compile(argvString, { dev: true }, [path])
+
+        if (isFirstCompilation) {
+            isFirstCompilation = false
+            firstCompileCallback()
+        }
+    })
+
+    watcher.on('add', async (path) => {
+        // Return if file doesn't include '.webpp'
+        if (!path.includes('.webpp')) return
+
+        await compile(argvString, { dev: true }, [path])
+
+        if (isFirstCompilation) {
+            isFirstCompilation = false
+            firstCompileCallback()
+        }
+    })
+
+    watcher.on('error', (error) => {
+        console.log(chalk.red('Error: ' + error))
+    })
+
+    process.on('SIGINT', () => {
+        watcher.close()
+        process.exit()
+    })
+
+    process.on('SIGTERM', () => {
+        watcher.close()
+        process.exit()
+    })
+
+    process.on('exit', () => {
+        watcher.close()
+    })
+
+    process.on('uncaughtException', (error) => {
+        console.log(chalk.red('Error: ' + error))
+    })
+}
+
+function useDevServer () {
+    const argvString = argv.join(' ').trim()
+    const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
+
+    const express = require('express')
+
+    const app = express()
+
+    const port = 489 + Math.floor(Math.random() * 1000)
+
+    app.use(express.static(projectdir))
+
+    app.listen(port, () => {
+        const open = require('open')
+        open(`http://localhost:${port}`)
+    })
+}
+
 ;(async function main () {
   if (command === '') {
     const { version } = require('../package.json')
@@ -31,60 +123,9 @@ const argStr = argv.join(' ').trim() + ' '
     // deepcode ignore ExpectsArray: It will work though
     await compile(argv.join(' ').trim(), { dev: false }, '*')
   } else if (command === 'watch' || command === 'w') {
-      const argvString = argv.join(' ').trim()
-      const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
-
-        const watcher = chokidar.watch(projectdir, {
-            ignored: /(^|[\/\\])\../,
-            persistent: true
-        })
-
-        watcher.on('ready', () => {
-            console.log(chalk.cyan('Watching for changes...'))
-        })
-
-        watcher.on('change', async (path) => {
-            // Return if file doesn't include '.webpp'
-            if (!path.includes('.webpp')) return
-
-            await compile(argvString, { dev: true }, [path])
-        })
-
-        watcher.on('unlink', async (path) => {
-            // Return if file doesn't include '.webpp'
-            if (!path.includes('.webpp')) return
-
-            await compile(argvString, { dev: true }, [path])
-        })
-
-        watcher.on('add', async (path) => {
-            // Return if file doesn't include '.webpp'
-            if (!path.includes('.webpp')) return
-            
-            await compile(argvString, { dev: true }, [path])
-        })
-
-        watcher.on('error', (error) => {
-            console.log(chalk.red('Error: ' + error))
-        })
-
-        process.on('SIGINT', () => {
-            watcher.close()
-            process.exit()
-        })
-
-        process.on('SIGTERM', () => {
-            watcher.close()
-            process.exit()
-        })
-
-        process.on('exit', () => {
-            watcher.close()
-        })
-
-        process.on('uncaughtException', (error) => {
-            console.log(chalk.red('Error: ' + error))
-        })
+    useWatcher()
+  } else if (command === 'dev' || command === 'serve' || command === 'd') {
+    useWatcher(useDevServer)
   } else {
     console.log(chalk.red('Unknown command: ' + command))
     console.log(chalk.red('Try: ' + chalk.yellow('webpp help')))
