@@ -162,14 +162,12 @@ async function compilePage (pagePath, parent, projectdir) {
     let content = ''
     let cssContent = ''
     let jsContent = ''
-    let sassContent = ''
     let tsContent = ''
 
     try { manifest = (await fs.promises.readFile(path.join(pagePath, '.yaml'), 'utf8')).toString('utf8') } catch (_e) {}
     try { content = (await fs.promises.readFile(path.join(pagePath, 'index.html'), 'utf8')).toString('utf8') } catch (_e) {}
     try { cssContent = (await fs.promises.readFile(path.join(pagePath, 'style.css'), 'utf8')).toString('utf8') } catch (_e) {}
     try { jsContent = (await fs.promises.readFile(path.join(pagePath, 'script.js'), 'utf8')).toString('utf8') } catch (_e) {}
-    try { sassContent = (await fs.promises.readFile(path.join(pagePath, 'style.sass'), 'utf8')).toString('utf8') } catch (_e) {}
     try { tsContent = (await fs.promises.readFile(path.join(pagePath, 'script.ts'), 'utf8')).toString('utf8') } catch (_e) {}
 
     // Parse manifest

@@ -16,6 +16,17 @@ A lightweight preprocessor for web projects
 - [ ] Use vue like reactivity
 - [X] Use @event in your HTML to listen to events
 
+# Why webpp?
+I created webpp because I wanted:
+- Components to be used in my HTML
+- That normal HTML is valid in webpp
+- To use SASS
+- To only write the body of the HTML
+- To bundle all my inline code into one file
+- To use frameworks without having to include them in every html file
+- To use event listeners in my HTML instead of defining them in the JS
+- To create static websites
+
 # Project Structure
 
 The project structure is like a normal web project, but instead of having a html file you have an .webpp folder.
