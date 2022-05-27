@@ -509,6 +509,69 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         <script defer src="${pageIdentifier}.js"></script>`
     }
 
+    // Dev scripts to inject
+    let devScripts = ''
+    if (compilerOptions.dev) {
+        // Start live reload server if not already started
+        if (!global.liveReloadServer) {
+            // deepcode ignore HttpToHttps: No need to use HTTPS for a Dev Server
+            const http = require('http')
+            const WebSocketServer = require('websocket').server
+            const server = http.createServer()
+            const serverPort = 989 + Math.floor(Math.random() * 1000)
+            server.listen(serverPort)
+
+            const wsServer = new WebSocketServer({
+                httpServer: server
+            })
+
+            global.liveReloadServer = {
+                httpServer: server,
+                wsServer,
+                serverPort,
+                connections: [],
+                sendData (data) {
+                    for (const connection of global.liveReloadServer.connections) {
+                        connection.sendUTF(JSON.stringify(data))
+                    }
+                }
+            }
+
+            wsServer.on('request', function (request) {
+                const connection = request.accept(null, request.origin)
+
+                global.liveReloadServer.connections.push(connection)
+
+                global.liveReloadServer.sendData({ hi: true })
+
+                connection.on('close', function (reasonCode, description) {
+                    // Client just disconnected
+                })
+            })
+        }
+
+        // Inject live reload
+        devScripts += `
+            <script defer>
+                const _ws = new WebSocket("ws://localhost:${global.liveReloadServer.serverPort}/");
+
+                _ws.onopen = function() {
+                    console.log("[Webpp] Live-Reload activated");
+                };
+
+                _ws.onmessage = function(e) {
+                    var data = JSON.parse(e.data);
+                    
+                    if (data.action === "PAGE_RELOAD") {
+                        location.reload();
+                    } else if (data.action === "CONSOLE_LOG") {
+                        console.log(data.message);
+                    }
+                };
+            </script>
+        `
+    }
+
     // Create HTML
     html = `
     <!DOCTYPE html>
@@ -526,6 +589,9 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         <!-- Embedded libraries -->
         ${libHead}
+
+        <!-- Injected dev scripts -->
+        ${devScripts}
     </head>
     <body>
         <noscript>
@@ -562,6 +628,13 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     const timeSinceStartInMs = Date.now() - startTimeStamp
 
     console.log(chalk.green(`Compiled ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))} in ${chalk.yellow(timeSinceStartInMs / 1000 + 's')}`))
+
+    // Reload page if in Dev Mode
+    if (compilerOptions.dev) {
+        global.liveReloadServer.sendData({
+            action: 'PAGE_RELOAD'
+        })
+    }
 
     return true
 }
