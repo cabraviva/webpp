@@ -11,8 +11,18 @@ const babel = require('@babel/core')
 const os = require('os')
 const homedir = os.homedir()
 const cacheDir = path.join(homedir, '.webpp-cache')
+const libcachedir = path.join(cacheDir, 'libcache')
+const fetchedJsDir = path.join(libcachedir, '.__fetchedjs__')
+const fetchedCssDir = path.join(libcachedir, '.__fetchedcss__')
+const isValidNPMPackageDir = path.join(libcachedir, '.__isvalidnpmpackage__')
+const isValidURLDir = path.join(libcachedir, '.__isvalidurl__')
 
 if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir)
+if (!fs.existsSync(libcachedir)) fs.mkdirSync(libcachedir)
+if (!fs.existsSync(fetchedJsDir)) fs.mkdirSync(fetchedJsDir)
+if (!fs.existsSync(fetchedCssDir)) fs.mkdirSync(fetchedCssDir)
+if (!fs.existsSync(isValidNPMPackageDir)) fs.mkdirSync(isValidNPMPackageDir)
+if (!fs.existsSync(isValidURLDir)) fs.mkdirSync(isValidURLDir)
 
 function scopeStyle (css, id) {
     css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
@@ -25,44 +35,166 @@ function scopeStyle (css, id) {
     return css
 }
 
-async function fetchLibRegistry () {
-    return (await axios.get('https://raw.githubusercontent.com/greencoder001/webpp-lib/main/libs.json')).data
-}
+async function cachify (dir, cname, url) {
+    const fetchIt = async function fetchIt () {
+        return (await axios.get(url)).data
+    }
 
-async function resolveLibRegistry () {
-    // First, try to load the registry from the RAM
-    if (global.libRegistry) return global.libRegistry
+    // First, try to load from RAM
+    if (!global.cached) global.cached = {}
+    if (global.cached[cname]) return global.cached[cname]
 
-    // Else, try to read the registry from the fs or fetch it
+    // Else, try to read from the fs or fetch it
     let needsFetch = false
-    if (!fs.existsSync(path.join(cacheDir, 'lib-registry.json'))) needsFetch = true
-    if (!fs.existsSync(path.join(cacheDir, 'lib-registry.time'))) needsFetch = true
+    if (!fs.existsSync(path.join(dir, cname))) needsFetch = true
+    if (!fs.existsSync(path.join(dir, `${cname}.time`))) needsFetch = true
+    
     if (!needsFetch) {
-        const time = (await fs.promises.readFile(path.join(cacheDir, 'lib-registry.time'))).toString()
+        const time = (await fs.promises.readFile(path.join(dir, `${cname}.time`))).toString()
         const timeStamp = new Date(time)
 
         // If the timestamp is older than 1 day, fetch the registry
         if (new Date().getTime() - timeStamp.getTime() > 86400000) {
-            const fetched = await fetchLibRegistry()
+            const fetched = await fetchIt()
             // deepcode ignore PT: We can trust the registry to be valid
-            fs.writeFileSync(path.join(cacheDir, 'lib-registry.json'), JSON.stringify(fetched))
-            fs.writeFileSync(path.join(cacheDir, 'lib-registry.time'), (new Date()).toISOString())
-            global.libRegistry = fetched
+            fs.writeFileSync(path.join(dir, cname), JSON.stringify(fetched))
+            fs.writeFileSync(path.join(dir, `${cname}.time`), (new Date()).toISOString())
+            global.cached[cname] = fetched
             return fetched
         }
 
-        const read = JSON.parse(fs.readFileSync(path.join(cacheDir, 'lib-registry.json')).toString('utf8'))
-        global.libRegistry = read
+        const read = JSON.parse(fs.readFileSync(path.join(dir, cname)).toString('utf8'))
+        global.cached[cname] = read
         return read
     } else {
-        const fetched = await fetchLibRegistry()
+        const fetched = await fetchIt()
         // deepcode ignore PT: We can trust the registry to be valid
-        fs.writeFileSync(path.join(cacheDir, 'lib-registry.json'), JSON.stringify(fetched))
-        fs.writeFileSync(path.join(cacheDir, 'lib-registry.time'), (new Date()).toISOString())
-        global.libRegistry = fetched
+        fs.writeFileSync(path.join(dir, cname), JSON.stringify(fetched))
+        fs.writeFileSync(path.join(dir, `${cname}.time`), (new Date()).toISOString())
+        global.cached[cname] = fetched
         return fetched
     }
 }
+
+async function isValidNPMPackage (pkgurl) {
+    const sanitizedPkgUrl = pkgurl.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+    if (!global.validnpmpackagescache) global.isvalidnpmpackagescache = {}
+    if (global.isvalidnpmpackagescache[sanitizedPkgUrl]) return global.isvalidnpmpackagescache[sanitizedPkgUrl]
+
+    const setState = (state) => {
+        global.isvalidnpmpackagescache[sanitizedPkgUrl] = state
+        fs.writeFileSync(path.join(isValidNPMPackageDir, `${sanitizedPkgUrl}.time`), (new Date()).toISOString())
+        fs.writeFileSync(path.join(isValidNPMPackageDir, sanitizedPkgUrl), state.toString())
+    }
+
+    if (fs.existsSync(path.join(isValidNPMPackageDir, sanitizedPkgUrl)) && fs.existsSync(path.join(isValidNPMPackageDir, `${sanitizedPkgUrl}.time`))) {
+        // Already cached in fs
+        const time = (await fs.promises.readFile(path.join(isValidNPMPackageDir, `${sanitizedPkgUrl}.time`))).toString()
+        const timeStamp = new Date(time)
+
+        // If the timestamp is older than 1 day, fetch again
+        if (new Date().getTime() - timeStamp.getTime() > 86400000) {
+            try {
+                const resp = (await axios.get(pkgurl)).data
+                if (resp.trim() === 'Failed to resolve the requested file.') {
+                    // npm package not valid
+                    setState(false)
+                    return false
+                } else {
+                    // npm package valid
+                    setState(true)
+                    return true
+                }
+            } catch {
+                // npm package not valid
+                setState(false)
+                return false
+            }
+        }
+
+        // Return the cached value
+        return fs.readFileSync(path.join(isValidNPMPackageDir, sanitizedPkgUrl)).toString() === 'true'
+    } else {
+        // Not cached yet, need to fetch
+        try {
+            const resp = (await axios.get(pkgurl)).data
+            if (resp.trim() === 'Failed to resolve the requested file.') {
+                // npm package not valid
+                setState(false)
+                return false
+            } else {
+                // npm package valid
+                setState(true)
+                return true
+            }
+        } catch {
+            // npm package not valid
+            setState(false)
+            return false
+        }
+    }
+}
+
+async function isValidURL (url) {
+    const sanitizedUrl = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+    if (!global.validurls) global.validurls = {}
+    if (global.validurls[sanitizedUrl]) return global.validurls[sanitizedUrl]
+
+    const setState = (state) => {
+        global.validurls[sanitizedUrl] = state
+        fs.writeFileSync(path.join(isValidURLDir, `${sanitizedUrl}.time`), (new Date()).toISOString())
+        fs.writeFileSync(path.join(isValidURLDir, sanitizedUrl), state.toString())
+    }
+
+    if (fs.existsSync(path.join(isValidURLDir, sanitizedUrl)) && fs.existsSync(path.join(isValidURLDir, `${sanitizedUrl}.time`))) {
+        // Already cached in fs
+        const time = (await fs.promises.readFile(path.join(isValidURLDir, `${sanitizedUrl}.time`))).toString()
+        const timeStamp = new Date(time)
+
+        // If the timestamp is older than 1 day, fetch again
+        if (new Date().getTime() - timeStamp.getTime() > 86400000) {
+            try {
+                const resp = (await axios.get(url)).data
+                if (resp.trim() === '') {
+                    // URL not valid
+                    setState(false)
+                    return false
+                } else {
+                    // URL valid
+                    setState(true)
+                    return true
+                }
+            } catch {
+                // URL not valid
+                setState(false)
+                return false
+            }
+        }
+
+        // Return the cached value
+        return fs.readFileSync(path.join(isValidURLDir, sanitizedUrl)).toString() === 'true'
+    } else {
+        // Not cached yet, need to fetch
+        try {
+            const resp = (await axios.get(url)).data
+            if (resp.trim() === '') {
+                // URL not valid
+                setState(false)
+                return false
+            } else {
+                // URL valid
+                setState(true)
+                return true
+            }
+        } catch {
+            // URL not valid
+            setState(false)
+            return false
+        }
+    }
+}
+
+const resolveLibRegistry = () => cachify(cacheDir, 'lib-registry.json', 'https://raw.githubusercontent.com/greencoder001/webpp-lib/main/libs.json')
 
 async function resolveLibrary (libname, projectdir, pagedir, parent) {
     if (typeof libname !== 'string') return
@@ -91,27 +223,17 @@ async function resolveLibrary (libname, projectdir, pagedir, parent) {
         }
     }
 
+    const sanitizedLibName = libname.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+
+
     // 2. Check if there's an npm package with the name
-    try {
-        const npmResp = (await axios.get(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)).data
-        if (npmResp.trim() === 'Failed to resolve the requested file.') {
-            // npm package not found
-        } else {
-            // npm package found
-            // Add as fetchJs
-            return parent.fetchJs(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)
-        }
-    } catch {
-        // npm package not found
+    if (await isValidNPMPackage(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)) {
+        return parent.fetchAndDetectType(`https://cdn.jsdelivr.net/npm/${encodeURIComponent(libname.trim())}@latest`)
     }
 
     // 3. Try to make a web request to the library
-    try {
-        const resp = (await axios.get(libname.trim())).data
+    if (await isValidURL(libname.trim())) {
         return parent.fetchAndDetectType(libname.trim())
-    }
-    catch {
-        // Library not found
     }
 
     console.log(chalk.yellow('Warning: ') + `Library ${libname} not found`)
@@ -191,6 +313,8 @@ function parseTypeScript(tsCode, fname, cwd) {
 }
 
 async function compilePage (pagePath, parent, projectdir) {
+    console.time(`Compiling ${pagePath}`)
+
     // Paths
     const pageName = pagePath.substring(0, pagePath.length - 6)
     const pageIdentifier = pageName.replace(/\\/g, '/').substring(pageName.replace(/\\/g, '/').lastIndexOf('/') + 1)
@@ -463,28 +587,30 @@ async function compilePage (pagePath, parent, projectdir) {
 
         await resolveLibrary(lib, projectdir, pagePath, {
             fetchJs: async (url) => {
-                const response = await axios.get(url)
+                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                const fetched = await cachify(fetchedJsDir, sanitizedURL, url)
                 mjs += `
                 /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
                 ;((function m(){
 
-                ${response.data}
+                ${fetched}
 
                 }).bind(window))();
                 /* End of ${lib} */
                 `
             },
             fetchCss: async (url) => {
-                const response = await axios.get(url)
+                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                const fetched = await cachify(fetchedCssDir, sanitizedURL, url)
                 css += `
                 /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ${response.data}
+                ${fetched}
                 /* End of ${lib} */
                 `
             },
             fetchAndDetectType: async (url) => {
                 const response = await axios.get(url)
-                const type = response.headers['content-type'] === 'text/css' ? 'css' : 'js'
+                const type = response.headers['content-type'].includes('css') ? 'css' : 'js'
                 if (type === 'js') {
                     mjs += `
                     /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
@@ -492,7 +618,7 @@ async function compilePage (pagePath, parent, projectdir) {
 
                     ${response.data}
 
-                    })();
+                    }).bind(window)();
                     /* End of ${lib} */
                     `
                 } else if (type === 'css') {
@@ -688,6 +814,8 @@ async function compilePage (pagePath, parent, projectdir) {
         await fs.promises.writeFile(cssPath, css)
         await fs.promises.writeFile(jsPath, js)
     }
+
+    console.timeEnd(`Compiling ${pagePath}`)
 }
 
 async function compile (argvString) {
