@@ -19,6 +19,10 @@ function scopeStyle (css, id) {
 }
 
 async function resolveLibrary (libname, projectdir, pagedir, parent) {
+    if (typeof libname !== 'string') return
+    if (libname.trim().length <= 0) return
+    if (libname.trim() === 'undefined' || libname.trim() === 'null') return
+
     // If we try to resolve a library we use this steps:
 
     // 1. Search for the library in the registry
@@ -172,6 +176,7 @@ async function compilePage (pagePath, parent, projectdir) {
 
     // Parse manifest
     manifest = YAML.parse(manifest)
+    if (!manifest) manifest = {}
     if (typeof manifest !== 'object') throw new Error(`Invalid manifest in ${pagePath}`)
     if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
     const singleFile = manifest.singleFile || false
@@ -193,7 +198,7 @@ async function compilePage (pagePath, parent, projectdir) {
             const componentPath = path.join(projectdir, '@Components', componentName + '.html')
 
             // Assign a component id
-            const componentId = `webpp-${componentName.replace(/^a-zA-Z0-9/g, '-')}-component-${uuid()}`
+            const componentId = `webpp-${componentName.replace(/\//g, '---slash---').replace(/[^a-zA-Z0-9]/g, '-')}-component-${uuid()}`
 
             // Parse props
             const componentProps = parseProps(componentPropsString)
@@ -233,7 +238,7 @@ async function compilePage (pagePath, parent, projectdir) {
             const componentDOM = new JSDOM(componentContent)
 
             // Get style
-            let style = componentDOM.window.document.querySelector('style').innerHTML
+            let style = (componentDOM.window.document.querySelector('style') || { innerHTML: '' }).innerHTML
 
             // Replace #({ PROP }) in the style with props
             style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
@@ -252,7 +257,7 @@ async function compilePage (pagePath, parent, projectdir) {
             /* End of styles for the ${componentName} component */
             `
 
-            let jsFromDom = componentDOM.window.document.querySelector('script').innerHTML
+            let jsFromDom = (componentDOM.window.document.querySelector('script') || { innerHTML: '' }).innerHTML
             let sjs = `
             /* Beginning of script for the ${componentName} component */
             ;(function _() {
@@ -298,7 +303,7 @@ async function compilePage (pagePath, parent, projectdir) {
             // Parse libs
             let componentLibs = []
             if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
-                componentLibs = componentDOM.window.document.querySelector('libs').innerHTML.trim().split(',').map(e => e.trim())
+                componentLibs = (componentDOM.window.document.querySelector('libs') || { innerHTML: '' }).innerHTML.trim().split(',').map(e => e.trim())
             }
             if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
             libsToInclude = libsToInclude.concat(componentLibs)
@@ -548,8 +553,8 @@ async function compilePage (pagePath, parent, projectdir) {
     // Create HTML
     html = `
     <!DOCTYPE html>
-    <html>
-    <head lang="${pageLang}">
+    <html lang="${pageLang}">
+    <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>${title}</title>
