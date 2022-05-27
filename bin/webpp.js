@@ -8,6 +8,7 @@ const chokidar = require('chokidar')
 const args = process.argv.slice(2)
 const command = (args[0] || '').trim()
 const argv = args.slice(1)
+const argStr = argv.join(' ').trim() + ' '
 
 ;(async function main () {
   if (command === '') {
@@ -27,7 +28,7 @@ const argv = args.slice(1)
     // compile
     console.log(chalk.yellow('  compile') + ' - ' + chalk.gray('Compile the project'))
   } else if (command === 'compile' || command === 'c' || command === 'build' || command === 'b' || command === 'run' || command === 'r' || command === '.') {
-    await compile(argv.join(' ').trim())
+    await compile(argv.join(' ').trim(), { dev: false })
 
     console.log(chalk.green('Compiled successfully'))
   } else if (command === 'watch' || command === 'w') {
@@ -47,7 +48,7 @@ const argv = args.slice(1)
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
             console.log(chalk.green('Change detected: ' + path))
-            await compile(argvString)
+            await compile(argvString, { dev: true })
             console.log(chalk.green('Compiled successfully'))
         })
 
@@ -55,7 +56,7 @@ const argv = args.slice(1)
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
             console.log(chalk.green('File deleted: ' + path))
-            await compile(argvString)
+            await compile(argvString, { dev: true })
             console.log(chalk.green('Compiled successfully'))
         })
 
@@ -63,7 +64,7 @@ const argv = args.slice(1)
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
             console.log(chalk.green('File added: ' + path))
-            await compile(argvString)
+            await compile(argvString, { dev: true })
             console.log(chalk.green('Compiled successfully'))
         })
 

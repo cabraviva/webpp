@@ -312,7 +312,20 @@ function parseTypeScript(tsCode, fname, cwd) {
     }).code
 }
 
-async function compilePage (pagePath, parent, projectdir) {
+async function compilePage (pagePath, parent, projectdir, compilerOptions = { dev: false }) {
+    // Do not compile if already compiling
+    if (!global.currentCompilingPages) global.currentCompilingPages = {}
+    if (global.currentCompilingPages[pagePath]) return
+    global.currentCompilingPages[pagePath] = true
+    
+    // Required options
+    if (typeof compilerOptions !== 'object') throw new TypeError('compilerOptions must be an object')
+    
+    // Default options
+    if (typeof compilerOptions.dev !== 'boolean') compilerOptions.dev = false
+    if (typeof compilerOptions.minify !== 'boolean') compilerOptions.minify = !compilerOptions.dev
+
+
     console.time(`Compiling ${pagePath}`)
 
     // Paths
@@ -555,9 +568,10 @@ async function compilePage (pagePath, parent, projectdir) {
                         let __webppcelement=document.querySelector("[data-webpp-element-id='${uniqueElementId}']");
                         // Add event listener
                         __webppcelement.addEventListener("${attrName.substring(1)}",function(event){
+                            ;let target=__webppcelement;
                             ;${element.getAttribute(attrName)};
                         });
-                    })();
+                    }).bind(window)();
                     /* End JS for event listener ${attrName} */
                     `
 
@@ -725,20 +739,25 @@ async function compilePage (pagePath, parent, projectdir) {
     }).code
 
     // Minify js
-    js = minifyHTML(`<script>${js}</script>`, {
-        collapseWhitespace: true,
-        minifyJS: true
-    })
-    js = js.substring(8, js.length - 9)
+    if (compilerOptions.minify) {
+        js = minifyHTML(`<script>${js}</script>`, {
+            collapseWhitespace: true,
+            minifyJS: true
+        })
+        js = js.substring(8, js.length - 9)
+    }
+    
 
     // Add cssContent to css
     css += cssContent
 
     // Minify css
-    css = minifyHTML(`<style>${css}</style>`, {
-        collapseWhitespace: true,
-        minifyCSS: true
-    }).replace('<style>', '').replace('</style>', '')
+    if (compilerOptions.minify) {
+        css = minifyHTML(`<style>${css}</style>`, {
+            collapseWhitespace: true,
+            minifyCSS: true
+        }).replace('<style>', '').replace('</style>', '')
+    }
 
     // Combine repeating css into one css block
     // a {color:#fff}h1{color:#fff} => a,h1{color:#fff}
@@ -799,12 +818,14 @@ async function compilePage (pagePath, parent, projectdir) {
     `
 
     // Minify HTML
-    html = minifyHTML(html, {
-        collapseWhitespace: true,
-        removeComments: true,
-        minifyCSS: true,
-        minifyJS: true
-    })
+    if (compilerOptions.minify) {
+        html = minifyHTML(html, {
+            collapseWhitespace: true,
+            removeComments: true,
+            minifyCSS: true,
+            minifyJS: true
+        })
+    }
 
     // Write outputs
     if (singleFile) {
@@ -815,10 +836,11 @@ async function compilePage (pagePath, parent, projectdir) {
         await fs.promises.writeFile(jsPath, js)
     }
 
+    global.currentCompilingPages[pagePath] = false
     console.timeEnd(`Compiling ${pagePath}`)
 }
 
-async function compile (argvString) {
+async function compile (argvString, compilerOptions) {
     const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
     
     // Recursively get all paths of folders that end with '.webpp'
@@ -839,7 +861,7 @@ async function compile (argvString) {
 
     // Compile every single page
     for (const webppFile of webppFolders) {
-        await compilePage(webppFile, parent, projectdir)
+        await compilePage(webppFile, parent, projectdir, compilerOptions)
     }
 
     // Write global files
