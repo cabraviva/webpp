@@ -47,7 +47,6 @@ const argStr = argv.join(' ').trim() + ' '
         watcher.on('change', async (path) => {
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
-            const pageNameForRecompilation = path.replace(/[\/\\]([^\\\/]*?)\.webpp[\/\\]/g, (match, pn) => pn)
 
             if (await compile(argvString, { dev: true }, [path])) {
                 console.log(chalk.green('Compiled successfully'))
@@ -57,7 +56,6 @@ const argStr = argv.join(' ').trim() + ' '
         watcher.on('unlink', async (path) => {
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
-            const pageNameForRecompilation = path.replace(/[\/\\]([^\\\/]*?)\.webpp[\/\\]/g, (match, pn) => pn)
 
             if (await compile(argvString, { dev: true }, [path])) {
                 console.log(chalk.green('Compiled successfully'))
@@ -67,8 +65,7 @@ const argStr = argv.join(' ').trim() + ' '
         watcher.on('add', async (path) => {
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
-            const pageNameForRecompilation = path.replace(/[\/\\]([^\\\/]*?)\.webpp[\/\\]/g, (match, pn) => pn)
-
+            
             if (await compile(argvString, { dev: true }, [path])) {
                 console.log(chalk.green('Compiled successfully'))
             }
