@@ -27,6 +27,7 @@
   "dependencies": {
     "@babel/core": "^7.18.2",
     "@babel/preset-env": "^7.18.2",
+    "@babel/preset-typescript": "^7.17.12",
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
     "html-minifier": "^4.0.0",

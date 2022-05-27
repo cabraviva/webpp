@@ -5,7 +5,7 @@ A lightweight preprocessor for web projects
 # Features
 
 - [X] Auto compiling .sass, .scss
-- [ ] Use TypeScript
+- [X] Use TypeScript
 - [X] Add npm modules, frameworks and stylesheets to your page with a simple syntax
 - [X] Bundle all your files into one stylesheet, script and html file
 - [X] Don't ever worry about waiting for the DOM to load again

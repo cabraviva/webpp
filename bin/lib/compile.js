@@ -136,6 +136,16 @@ function stringifyProps (propsObj) {
     return propsArr.join(' ')
 }
 
+function parseTypeScript(tsCode, fname, cwd) {
+    return babel.transformSync(tsCode, {
+        presets: [
+            '@babel/preset-typescript'
+        ],
+        filename: fname,
+        cwd
+    }).code
+}
+
 async function compilePage (pagePath, parent, projectdir) {
     // Paths
     const pageName = pagePath.substring(0, pagePath.length - 6)
@@ -499,7 +509,7 @@ async function compilePage (pagePath, parent, projectdir) {
                 /* Beginning of an external script element which was added to head at ${new Date()} */
                 ;(function m(){
 
-                ${await fs.promises.readFile(path.join(pagePath, src), 'utf8')}
+                ${parseTypeScript(await fs.promises.readFile(path.join(pagePath, src), 'utf8'), src, pagePath)}
 
                 })();
                 /* End of an external script element */
@@ -526,6 +536,9 @@ async function compilePage (pagePath, parent, projectdir) {
 
     // Set externalfile html
     let externalFileHTML = ''
+
+    // Add tsContent to js
+    js += parseTypeScript(tsContent, 'script.ts', pagePath)
 
     // Add jsContent to js
     js += jsContent
