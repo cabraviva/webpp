@@ -178,6 +178,9 @@ async function compilePage (pagePath, parent, projectdir) {
     if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
     const singleFile = manifest.singleFile || false
 
+    // Language
+    const pageLang = manifest.lang || manifest.language || 'en'
+
     // Embed libraries
     let libHead = ''
     let mjs = ''
@@ -527,13 +530,13 @@ async function compilePage (pagePath, parent, projectdir) {
     html = `
     <!DOCTYPE html>
     <html>
-    <head>
+    <head lang="${pageLang}">
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>${title}</title>
 
         <!-- External files -->
-        ${externalFileHTML}
+        <!--${externalFileHTML}-->
 
         <!-- Head from Virtual DOM -->
         ${shouldBeInHead}
@@ -542,6 +545,11 @@ async function compilePage (pagePath, parent, projectdir) {
         ${libHead}
     </head>
     <body>
+        <noscript>
+            <div style="font-family:sans-serif;position:fixed;z-index:1000000;top:0;left:0;width:100vw;height:100vh;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;text-align:center;">
+                <h1>${(pageLang.includes('de') || pageLang.includes('german')) ? 'Bitte aktivieren Sie Javascript in Ihrem Browser, um diese Seite anzuzeigen!' : 'Please enable Javascript in your browser to view this page!'}</h1>
+            </div>
+        </noscript>
         ${content}
     </body>
     </html>
