@@ -516,6 +516,27 @@ async function compilePage (pagePath, parent, projectdir) {
         minifyCSS: true
     }).replace('<style>', '').replace('</style>', '')
 
+    // Combine repeating css into one css block
+    // a {color:#fff}h1{color:#fff} => a,h1{color:#fff}
+    let repeatingCssBlocks = {
+        // cssBlock: [...selectors]
+    }
+
+    css = css.replace(/(.*?){(.*?)}/g, (match, selector, cssBlock) => {
+        if (!repeatingCssBlocks[cssBlock.trim()]) repeatingCssBlocks[cssBlock.trim()] = []
+        repeatingCssBlocks[cssBlock.trim()].push(selector)
+
+        return ''
+    })
+
+    for (const cssBlock in repeatingCssBlocks) {
+        repeatingCssBlocks[cssBlock] = [...new Set(repeatingCssBlocks[cssBlock])]
+
+        const selectors = repeatingCssBlocks[cssBlock].join(',')
+        css += `${selectors}{${cssBlock}}`
+    }
+
+
     // Singlefile
     if (singleFile) {
         externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
