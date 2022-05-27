@@ -8,6 +8,11 @@ const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
 const sass = require('node-sass')
 const babel = require('@babel/core')
+const os = require('os')
+const homedir = os.homedir()
+const cacheDir = path.join(homedir, '.webpp-cache')
+
+if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir)
 
 function scopeStyle (css, id) {
     css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
@@ -20,6 +25,45 @@ function scopeStyle (css, id) {
     return css
 }
 
+async function fetchLibRegistry () {
+    return (await axios.get('https://raw.githubusercontent.com/greencoder001/webpp-lib/main/libs.json')).data
+}
+
+async function resolveLibRegistry () {
+    // First, try to load the registry from the RAM
+    if (global.libRegistry) return global.libRegistry
+
+    // Else, try to read the registry from the fs or fetch it
+    let needsFetch = false
+    if (!fs.existsSync(path.join(cacheDir, 'lib-registry.json'))) needsFetch = true
+    if (!fs.existsSync(path.join(cacheDir, 'lib-registry.time'))) needsFetch = true
+    if (!needsFetch) {
+        const time = (await fs.promises.readFile(path.join(cacheDir, 'lib-registry.time'))).toString()
+        const timeStamp = new Date(time)
+
+        // If the timestamp is older than 1 day, fetch the registry
+        if (new Date().getTime() - timeStamp.getTime() > 86400000) {
+            const fetched = await fetchLibRegistry()
+            // deepcode ignore PT: We can trust the registry to be valid
+            fs.writeFileSync(path.join(cacheDir, 'lib-registry.json'), JSON.stringify(fetched))
+            fs.writeFileSync(path.join(cacheDir, 'lib-registry.time'), (new Date()).toISOString())
+            global.libRegistry = fetched
+            return fetched
+        }
+
+        const read = JSON.parse(fs.readFileSync(path.join(cacheDir, 'lib-registry.json')).toString('utf8'))
+        global.libRegistry = read
+        return read
+    } else {
+        const fetched = await fetchLibRegistry()
+        // deepcode ignore PT: We can trust the registry to be valid
+        fs.writeFileSync(path.join(cacheDir, 'lib-registry.json'), JSON.stringify(fetched))
+        fs.writeFileSync(path.join(cacheDir, 'lib-registry.time'), (new Date()).toISOString())
+        global.libRegistry = fetched
+        return fetched
+    }
+}
+
 async function resolveLibrary (libname, projectdir, pagedir, parent) {
     if (typeof libname !== 'string') return
     if (libname.trim().length <= 0) return
@@ -28,7 +72,7 @@ async function resolveLibrary (libname, projectdir, pagedir, parent) {
     // If we try to resolve a library we use this steps:
 
     // 1. Search for the library in the registry
-    const libRegistry = (await axios.get('https://raw.githubusercontent.com/greencoder001/webpp-lib/main/libs.json')).data
+    const libRegistry = await resolveLibRegistry()
     const lib = libRegistry[libname.toLowerCase()]
     if (lib) {
         // 1.1. If the library is found, follow the steps
