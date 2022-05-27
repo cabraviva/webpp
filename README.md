@@ -17,6 +17,7 @@ A lightweight preprocessor for web projects
 - [ ] Use vue like reactivity
 - [X] Use @event in your HTML to listen to events
 - [ ] Caching System for super speed builds
+- [X] Super fast dev builds & slow, but ultra compatible production builds
 
 # Why webpp?
 I created webpp because I wanted:

@@ -34,7 +34,7 @@ if (!fs.existsSync(isValidURLDir)) fs.mkdirSync(isValidURLDir)
 async function compilePage (pagePath, parent, projectdir, compilerOptions = { dev: false }) {
     // Do not compile if already compiling
     if (!global.currentCompilingPages) global.currentCompilingPages = {}
-    if (global.currentCompilingPages[pagePath]) return
+    if (global.currentCompilingPages[pagePath]) return false
     global.currentCompilingPages[pagePath] = true
     
     // Required options
@@ -450,12 +450,15 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     js = mjs + js
 
     // Use Babel to transpile js
-    js = babel.transformSync(js, {
-        presets: [
-            '@babel/preset-env'
-        ],
-        cwd: pagePath
-    }).code
+    if (!compilerOptions.dev) {
+        // Don't transpile in dev mode
+        js = babel.transformSync(js, {
+            presets: [
+                '@babel/preset-env'
+            ],
+            cwd: pagePath
+        }).code
+    }
 
     // Minify js
     if (compilerOptions.minify) {
@@ -557,6 +560,8 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
     global.currentCompilingPages[pagePath] = false
     console.timeEnd(`Compiling ${pagePath}`)
+
+    return true
 }
 
 async function compile (argvString, compilerOptions) {
@@ -580,7 +585,7 @@ async function compile (argvString, compilerOptions) {
 
     // Compile every single page
     for (const webppFile of webppFolders) {
-        await compilePage(webppFile, parent, projectdir, compilerOptions)
+        const compileresult = await compilePage(webppFile, parent, projectdir, compilerOptions)
     }
 
     // Write global files
