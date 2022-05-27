@@ -536,7 +536,7 @@ async function compilePage (pagePath, parent, projectdir) {
         <title>${title}</title>
 
         <!-- External files -->
-        <!--${externalFileHTML}-->
+        ${externalFileHTML}
 
         <!-- Head from Virtual DOM -->
         ${shouldBeInHead}
