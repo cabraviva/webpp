@@ -44,8 +44,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     if (typeof compilerOptions.dev !== 'boolean') compilerOptions.dev = false
     if (typeof compilerOptions.minify !== 'boolean') compilerOptions.minify = !compilerOptions.dev
 
-
-    console.time(`Compiling ${pagePath}`)
+    const startTimeStamp = Date.now()
 
     // Paths
     const pageName = pagePath.substring(0, pagePath.length - 6)
@@ -559,7 +558,10 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     }
 
     global.currentCompilingPages[pagePath] = false
-    console.timeEnd(`Compiling ${pagePath}`)
+    
+    const timeSinceStartInMs = Date.now() - startTimeStamp
+
+    console.log(chalk.green(`Compiled ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))} in ${chalk.yellow(timeSinceStartInMs / 1000 + 's')}`))
 
     return true
 }

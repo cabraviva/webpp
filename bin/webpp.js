@@ -28,9 +28,8 @@ const argStr = argv.join(' ').trim() + ' '
     // compile
     console.log(chalk.yellow('  compile') + ' - ' + chalk.gray('Compile the project'))
   } else if (command === 'compile' || command === 'c' || command === 'build' || command === 'b' || command === 'run' || command === 'r' || command === '.') {
+    // deepcode ignore ExpectsArray: It will work though
     await compile(argv.join(' ').trim(), { dev: false }, '*')
-
-    console.log(chalk.green('Compiled successfully'))
   } else if (command === 'watch' || command === 'w') {
       const argvString = argv.join(' ').trim()
       const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
@@ -48,27 +47,21 @@ const argStr = argv.join(' ').trim() + ' '
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
 
-            if (await compile(argvString, { dev: true }, [path])) {
-                console.log(chalk.green('Compiled successfully'))
-            }
+            await compile(argvString, { dev: true }, [path])
         })
 
         watcher.on('unlink', async (path) => {
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
 
-            if (await compile(argvString, { dev: true }, [path])) {
-                console.log(chalk.green('Compiled successfully'))
-            }
+            await compile(argvString, { dev: true }, [path])
         })
 
         watcher.on('add', async (path) => {
             // Return if file doesn't include '.webpp'
             if (!path.includes('.webpp')) return
             
-            if (await compile(argvString, { dev: true }, [path])) {
-                console.log(chalk.green('Compiled successfully'))
-            }
+            await compile(argvString, { dev: true }, [path])
         })
 
         watcher.on('error', (error) => {
