@@ -6,6 +6,7 @@ const axios = require('axios')
 const chalk = require('chalk')
 const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
+const sass = require('node-sass')
 
 function scopeStyle (css, id) {
     css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
@@ -173,6 +174,32 @@ async function compilePage (pagePath, parent, projectdir) {
     try { cssContent = (await fs.promises.readFile(path.join(pagePath, 'style.css'), 'utf8')).toString('utf8') } catch (_e) {}
     try { jsContent = (await fs.promises.readFile(path.join(pagePath, 'script.js'), 'utf8')).toString('utf8') } catch (_e) {}
     try { tsContent = (await fs.promises.readFile(path.join(pagePath, 'script.ts'), 'utf8')).toString('utf8') } catch (_e) {}
+
+    // Parse SASS
+    if (fs.existsSync(path.join(pagePath, 'style.sass'))) {
+        const parsedSass = sass.renderSync({
+            file: path.join(pagePath, 'style.sass')
+        }).css
+
+        css += `
+        /* CSS parsed from style.sass */
+        ${parsedSass}
+        /* ########### End ########## */
+        `
+    }
+
+    // Parse SCSS
+    if (fs.existsSync(path.join(pagePath, 'style.scss'))) {
+        const parsedScss = sass.renderSync({
+            file: path.join(pagePath, 'style.scss')
+        }).css
+
+        css += `
+        /* CSS parsed from style.scss */
+        ${parsedScss}
+        /* ########### End ########## */
+        `
+    }
 
     // Parse manifest
     manifest = YAML.parse(manifest)
