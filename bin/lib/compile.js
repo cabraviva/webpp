@@ -564,7 +564,9 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     return true
 }
 
-async function compile (argvString, compilerOptions) {
+async function compile (argvString, compilerOptions, pagesToReCompile) {
+    let finalCompileResult = true
+
     const projectdir = path.isAbsolute(argvString) ? path.normalize(argvString) : path.normalize(path.join(process.cwd(), path.normalize(argvString)))
     
     // Recursively get all paths of folders that end with '.webpp'
@@ -585,13 +587,31 @@ async function compile (argvString, compilerOptions) {
 
     // Compile every single page
     for (const webppFile of webppFolders) {
-        const compileresult = await compilePage(webppFile, parent, projectdir, compilerOptions)
+        // Skip if not in pagesToReCompile
+
+        const doTheCompilation = async () => {
+            const compileresult = await compilePage(webppFile, parent, projectdir, compilerOptions)
+            if (compileresult === false) finalCompileResult = false
+        }
+
+        if (pagesToReCompile === '*') {
+            await doTheCompilation()
+            continue
+        }
+
+        if (!pagesToReCompile.some(x => x.includes(webppFile))) {
+            continue
+        }
+
+        await doTheCompilation()        
     }
 
     // Write global files
     for (const fileName in globalFiles) {
         await fs.promises.writeFile(path.join(projectdir, fileName), globalFiles[fileName])
     }
+
+    return finalCompileResult
 }
 
 module.exports = compile
