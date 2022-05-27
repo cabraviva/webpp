@@ -1,6 +1,6 @@
 {
   "name": "webpp",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A lightweight preprocessor for web projects",
   "main": "bin/webpp.js",
   "bin": {
