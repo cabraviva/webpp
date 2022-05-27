@@ -7,6 +7,7 @@ const chalk = require('chalk')
 const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
 const sass = require('node-sass')
+const babel = require('@babel/core')
 
 function scopeStyle (css, id) {
     css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
@@ -147,7 +148,7 @@ async function compilePage (pagePath, parent, projectdir) {
     let html = ''
     let css = ''
     let js = `
-    ;__MountedWebPPComponents__={};
+    ;window.__MountedWebPPComponents__={};
     function __WEBPP_HELPER_mergeObjects() {
         for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
             objs[_key] = arguments[_key];
@@ -411,11 +412,11 @@ async function compilePage (pagePath, parent, projectdir) {
                 const response = await axios.get(url)
                 mjs += `
                 /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ;(function m(){
+                ;((function m(){
 
                 ${response.data}
 
-                })();
+                }).bind(window))();
                 /* End of ${lib} */
                 `
             },
@@ -531,6 +532,14 @@ async function compilePage (pagePath, parent, projectdir) {
 
     // Merge mjs and js
     js = mjs + js
+
+    // Use Babel to transpile js
+    js = babel.transformSync(js, {
+        presets: [
+            '@babel/preset-env'
+        ],
+        cwd: pagePath
+    }).code
 
     // Minify js
     js = minifyHTML(`<script>${js}</script>`, {
