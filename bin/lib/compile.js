@@ -566,6 +566,9 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         // Merge mjs and js
         js = mjs + js
 
+        // Defer js & top level await
+        js = `window.addEventListener("DOMContentLoaded",(async function(){${js}}).bind(window));`
+
         // Use Babel to transpile js
         if (!compilerOptions.dev) {
             // Don't transpile in dev mode
@@ -618,13 +621,12 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             css += `${selectors}{${cssBlock}}`
         }
 
-
         // Singlefile
         if (singleFile) {
-            externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
+            externalFileHTML = `<style>${css}</style><script>${js}</script>`
         } else {
             externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-            <script defer src="${pageIdentifier}.js"></script>`
+            <script src="${pageIdentifier}.js"></script>`
         }
 
         // Dev scripts to inject
