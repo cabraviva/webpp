@@ -465,11 +465,11 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                         const id = uuid()
                         const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
 
-                        element.setAttribute(`webpp-jsy-out-on-attr-for-${attrName}`, id)
+                        element.setAttribute(`data-webpp-jsy-out-on-attr-for-${attrName}`, id)
 
                         suffixJs += `
                             ;(function(){
-                                let __webppcurrentjsyelement = document.querySelector('[webpp-jsy-out-on-attr-for-${attrName}="${id}"]');
+                                let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-on-attr-for-${attrName}="${id}"]');
                                 let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
                                 if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
                                     /* It's a state */
