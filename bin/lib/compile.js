@@ -425,11 +425,24 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             vdom.window.document.body.innerHTML = (' ' + vdom.window.document.body.innerHTML).replace(/([^"]){{(.*?)}}/gms, (match, c1, jsy) => {
                 jsy = jsy.trim()
                 const id = uuid()
+                const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
 
                 suffixJs += `
                     ;(function(){
                         let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-id="${id}"]');
-                        __webppcurrentjsyelement.innerHTML = __WEBPP_CODED_eval('${btoa(jsy)}');
+                        let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
+                        if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                            /* It's a state */
+                            __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                        }
+                        if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
+                            __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned.__webpp_jsy_getter();
+                            __webpp_jsy_returned.__webpp_jsy_effect(function(v,oldv){
+                                __webppcurrentjsyelement.innerHTML = v;
+                            });
+                        } else {
+                            __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned;
+                        }
                     })();
                 `
 
