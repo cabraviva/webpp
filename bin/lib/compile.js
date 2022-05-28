@@ -6,7 +6,7 @@ const axios = require('axios')
 const chalk = require('chalk')
 const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
-const sass = require('node-sass')
+const sass = require('sass')
 const babel = require('@babel/core')
 const parseTypeScript = require('./parseTypeScript')
 const scopeStyle = require('./scopeStyle')
@@ -41,10 +41,10 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     if (!global.currentCompilingPages) global.currentCompilingPages = {}
     if (global.currentCompilingPages[pagePath]) return false
     global.currentCompilingPages[pagePath] = true
-    
+
     // Required options
     if (typeof compilerOptions !== 'object') throw new TypeError('compilerOptions must be an object')
-    
+
     // Default options
     if (typeof compilerOptions.dev !== 'boolean') compilerOptions.dev = false
     if (typeof compilerOptions.minify !== 'boolean') compilerOptions.minify = !compilerOptions.dev
@@ -58,591 +58,770 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
     const cssPath = pageName + '.css'
     const jsPath = pageName + '.js'
 
-    // Outputs
-    let html = ''
-    let css = ''
-    let js = `
-    ;window.__MountedWebPPComponents__={};
-    function __WEBPP_HELPER_mergeObjects() {
-        for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
-            objs[_key] = arguments[_key];
-        }
-
-        return objs.reduce(function (acc, obj) {
-            Object.keys(obj).forEach(function (key) {
-            acc[key] = obj[key];
-            });
-            return acc;
-        }, {});
-    }
-    `
-
-    // Read files
-    let manifest = ''
-    let content = ''
-    let cssContent = ''
-    let jsContent = ''
-    let tsContent = ''
-
-    try { manifest = (await fs.promises.readFile(path.join(pagePath, '.yaml'), 'utf8')).toString('utf8') } catch (_e) {}
-    try { content = (await fs.promises.readFile(path.join(pagePath, 'index.html'), 'utf8')).toString('utf8') } catch (_e) {}
-    try { cssContent = (await fs.promises.readFile(path.join(pagePath, 'style.css'), 'utf8')).toString('utf8') } catch (_e) {}
-    try { jsContent = (await fs.promises.readFile(path.join(pagePath, 'script.js'), 'utf8')).toString('utf8') } catch (_e) {}
-    try { tsContent = (await fs.promises.readFile(path.join(pagePath, 'script.ts'), 'utf8')).toString('utf8') } catch (_e) {}
-
-    // Parse SASS
-    if (fs.existsSync(path.join(pagePath, 'style.sass'))) {
-        const parsedSass = sass.renderSync({
-            file: path.join(pagePath, 'style.sass')
-        }).css
-
-        css += `
-        /* CSS parsed from style.sass */
-        ${parsedSass}
-        /* ########### End ########## */
-        `
-    }
-
-    // Parse SCSS
-    if (fs.existsSync(path.join(pagePath, 'style.scss'))) {
-        const parsedScss = sass.renderSync({
-            file: path.join(pagePath, 'style.scss')
-        }).css
-
-        css += `
-        /* CSS parsed from style.scss */
-        ${parsedScss}
-        /* ########### End ########## */
-        `
-    }
-
-    // Parse manifest
-    manifest = YAML.parse(manifest)
-    if (!manifest) manifest = {}
-    if (typeof manifest !== 'object') throw new Error(`Invalid manifest in ${pagePath}`)
-    if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
-    const singleFile = manifest.singleFile || false
-
-    // Language
-    const pageLang = manifest.lang || manifest.language || 'en'
-
-    // Embed libraries
-    let libHead = ''
-    let mjs = ''
-    let libsToInclude = manifest.use || []
-
-    // Render components
-    // Components are saved in the @Components folder in the projectdir
-    function parseComponents ($content) {
-        return $content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
-            const componentName = inlineComponent.split(' ')[0]
-            const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
-            const componentPath = path.join(projectdir, '@Components', componentName + '.html')
-
-            // Assign a component id
-            const componentId = `webpp-${componentName.replace(/\//g, '---slash---').replace(/[^a-zA-Z0-9]/g, '-')}-component-${uuid()}`
-
-            // Parse props
-            const componentProps = parseProps(componentPropsString)
-
-            if (!fs.existsSync(componentPath)) {
-                // Component not found
-                console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
-                return match
+    try {
+        // Outputs
+        let html = ''
+        let css = ''
+        let js = `
+        ;window.__MountedWebPPComponents__={};
+        function __WEBPP_HELPER_mergeObjects() {
+            for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
+                objs[_key] = arguments[_key];
             }
 
-            // Read component file
-            let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
+            return objs.reduce(function (acc, obj) {
+                Object.keys(obj).forEach(function (key) {
+                acc[key] = obj[key];
+                });
+                return acc;
+            }, {});
+        }
+        `
 
-            // Define Component value in @event listeners
-            componentContent = componentContent.replace(/<(.*?) (.*?)>/g, (match, elemName, elemProps) => {
-                const elemPropsObj = parseProps(elemProps)
-                let needToReAssignProps = false
-                
-                for (const elemPropsKey of Object.keys(elemPropsObj)) {
-                    if (elemPropsKey.startsWith('@')) {
-                        elemPropsObj[elemPropsKey] = `let Component=__MountedWebPPComponents__['${componentId}'];${elemPropsObj[elemPropsKey]}`.replace(/"/g, '\'')
-                        needToReAssignProps = true
+        // Read files
+        let manifest = ''
+        let content = ''
+        let cssContent = ''
+        let jsContent = ''
+        let tsContent = ''
+
+        try { manifest = (await fs.promises.readFile(path.join(pagePath, '.yaml'), 'utf8')).toString('utf8') } catch (_e) {}
+        try { content = (await fs.promises.readFile(path.join(pagePath, 'index.html'), 'utf8')).toString('utf8') } catch (_e) {}
+        try { cssContent = (await fs.promises.readFile(path.join(pagePath, 'style.css'), 'utf8')).toString('utf8') } catch (_e) {}
+        try { jsContent = (await fs.promises.readFile(path.join(pagePath, 'script.js'), 'utf8')).toString('utf8') } catch (_e) {}
+        try { tsContent = (await fs.promises.readFile(path.join(pagePath, 'script.ts'), 'utf8')).toString('utf8') } catch (_e) {}
+
+        // Parse SASS
+        if (fs.existsSync(path.join(pagePath, 'style.sass'))) {
+            const parsedSass = sass.compile(path.join(pagePath, 'style.sass')).css
+
+            css += `
+            /* CSS parsed from style.sass */
+            ${parsedSass}
+            /* ########### End ########## */
+            `
+        }
+
+        // Parse SCSS
+        if (fs.existsSync(path.join(pagePath, 'style.scss'))) {
+            const parsedScss = sass.compile(path.join(pagePath, 'style.scss')).css
+
+            css += `
+            /* CSS parsed from style.scss */
+            ${parsedScss}
+            /* ########### End ########## */
+            `
+        }
+
+        // Parse manifest
+        manifest = YAML.parse(manifest)
+        if (!manifest) manifest = {}
+        if (typeof manifest !== 'object') throw new Error(`Invalid manifest in ${pagePath}`)
+        if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
+        const singleFile = manifest.singleFile || false
+
+        // Language
+        const pageLang = manifest.lang || manifest.language || 'en'
+
+        // Embed libraries
+        let libHead = ''
+        let mjs = ''
+        let libsToInclude = manifest.use || []
+
+        // Render components
+        // Components are saved in the @Components folder in the projectdir
+        function parseComponents ($content) {
+            return $content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
+                const componentName = inlineComponent.split(' ')[0]
+                const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
+                const componentPath = path.join(projectdir, '@Components', componentName + '.html')
+
+                // Assign a component id
+                const componentId = `webpp-${componentName.replace(/\//g, '---slash---').replace(/[^a-zA-Z0-9]/g, '-')}-component-${uuid()}`
+
+                // Parse props
+                const componentProps = parseProps(componentPropsString)
+
+                if (!fs.existsSync(componentPath)) {
+                    // Component not found
+                    console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
+                    return match
+                }
+
+                // Read component file
+                let componentContent = fs.readFileSync(componentPath, 'utf8').toString('utf8')
+
+                // Define Component value in @event listeners
+                componentContent = componentContent.replace(/<(.*?) (.*?)>/g, (match, elemName, elemProps) => {
+                    const elemPropsObj = parseProps(elemProps)
+                    let needToReAssignProps = false
+                    
+                    for (const elemPropsKey of Object.keys(elemPropsObj)) {
+                        if (elemPropsKey.startsWith('@')) {
+                            elemPropsObj[elemPropsKey] = `let Component=__MountedWebPPComponents__['${componentId}'];${elemPropsObj[elemPropsKey]}`.replace(/"/g, '\'')
+                            needToReAssignProps = true
+                        }
+                    }
+
+                    if (needToReAssignProps) {
+                        return `<${elemName} ${stringifyProps(elemPropsObj)}>`
+                    }
+
+                    return match	
+                })
+
+                // Parse other components
+                componentContent = parseHTML_(componentContent)
+
+                // Create Virtual DOM from component
+                const componentDOM = new JSDOM(componentContent)
+
+                // Get style
+                let style = (componentDOM.window.document.querySelector('style') || { innerHTML: '' }).innerHTML.trim()
+
+                // Replace #({ PROP }) in the style with props
+                style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                    propKey = propKey.trim()
+
+                    return componentProps[propKey]
+                })
+
+                // Get lang
+                let lang = (componentDOM.window.document.querySelector('style') || {
+                    getAttribute () {
+                        return 'css'
+                    }
+                }).getAttribute('lang') || 'css'
+
+                if (lang === 'css') {
+                    // Already css, no further step required
+                } else if (lang === 'sass') {
+                    // Convert sass to css
+                    const rsass = style
+                    const fname = path.join(pagePath, `$inlinesheet-${uuid()}.sass`)
+
+                    // Write sass to file
+                    fs.writeFileSync(fname, rsass)
+
+                    // Compile sass
+                    let compiledCss = ''
+                    try {
+                        compiledCss = sass.compile(fname).css
+                    } catch (e) {
+                        fs.unlinkSync(fname)
+                        throw e
+                    }
+
+                    // Replace style with css
+                    style = compiledCss
+
+                    // Remove file
+                    fs.unlinkSync(fname)
+                } else if (lang === 'scss') {
+                    // Convert sass to css
+                    const scss = style
+                    const fname = path.join(pagePath, `$inlinesheet-${uuid()}.scss`)
+
+                    // Write sass to file
+                    fs.writeFileSync(fname, scss)
+
+                    // Compile sass
+                    let compiledCss = ''
+                    try {
+                        compiledCss = sass.compile(fname).css
+                    } catch (e) {
+                        fs.unlinkSync(fname)
+                        throw e
+                    }
+
+                    // Replace style with css
+                    style = compiledCss
+
+                    // Remove file
+                    fs.unlinkSync(fname)
+                } else {
+                    // Unknown lang
+                    console.error(chalk.red(`Unknown stylesheet lang: ${lang}`))
+                }
+
+                // Scope the style
+                style = scopeStyle(style, componentId)
+
+                // Add the style to the css
+                css += `
+                /* Beginning of styles for the ${componentName} component */
+                ${style}
+                /* End of styles for the ${componentName} component */
+                `
+
+                let jsFromDom = (componentDOM.window.document.querySelector('script') || { innerHTML: '' }).innerHTML
+                let sjs = `
+                /* Beginning of script for the ${componentName} component */
+                ;(function _() {
+                    // Add component to __MountedWebPPComponents__
+                    ;__MountedWebPPComponents__["${componentId}"] = ${JSON.stringify({
+                        id: componentId,
+                        name: componentName,
+                        props: componentProps
+                    })};
+                    ;__MountedWebPPComponents__["${componentId}"].element=document.querySelector("#${componentId}");
+                    ;__MountedWebPPComponents__["${componentId}"].querySelector=function querySelector(selector){
+                        return document.querySelector("#${componentId}").querySelector(selector);
+                    };
+                    ;__MountedWebPPComponents__["${componentId}"].querySelectorAll=function querySelectorAll(selector){
+                        return document.querySelector("#${componentId}").querySelectorAll(selector);
+                    };
+                    ;__MountedWebPPComponents__["${componentId}"].$=__MountedWebPPComponents__["${componentId}"].querySelector;
+                    ;__MountedWebPPComponents__["${componentId}"].$$=__MountedWebPPComponents__["${componentId}"].querySelectorAll;
+                    ;__MountedWebPPComponents__["${componentId}"].define=function define(obj){
+                        ;__MountedWebPPComponents__["${componentId}"]=__WEBPP_HELPER_mergeObjects(__MountedWebPPComponents__["${componentId}"],obj);
+                        ;__MountedWebPPComponents__["${componentId}"].mounted();
+                    };
+
+                    // Make Component variable available
+                    ;let Component=__MountedWebPPComponents__["${componentId}"];
+
+                    // Real JS
+                    ;${jsFromDom};
+                })();
+                /* End of script for the ${componentName} component */
+                `
+
+                // Get template
+                let template = (componentDOM.window.document.querySelector('template') || { innerHTML: '<h1>Add a template tag to display content!</h1>' }).innerHTML
+
+                // Replace #({ PROP }) in the template with props
+                template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                    propKey = propKey.trim()
+
+                    return componentProps[propKey]
+                })
+
+                // Parse libs
+                let componentLibs = []
+                if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
+                    componentLibs = (componentDOM.window.document.querySelector('libs') || { innerHTML: '' }).innerHTML.trim().split(',').map(e => e.trim())
+                }
+                if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
+                libsToInclude = libsToInclude.concat(componentLibs)
+
+                let componentHTML = `
+                    <div id="${componentId}">
+                        ${template}
+                    </div>
+                `
+
+                js += sjs
+                return componentHTML
+            })
+        }
+
+        function parseHTML_(htc) {
+            // Parse Components
+            htc = parseComponents(htc)
+
+            // Create Virtual DOM
+            const vdom = new JSDOM(htc)
+
+            // Get every element
+            const elements = vdom.window.document.querySelectorAll('*')
+
+            for (const element of elements) {
+                const attrNames = element.getAttributeNames()
+
+                for (const attrName of attrNames) {
+                    // Check if attribute starts with @
+                    if (attrName.startsWith('@')) {
+                        // Assign a id
+                        const uniqueElementId = `webpp-element-with-id-${uuid()}-${uuid()}`
+
+                        // Add the id to the element as [data-webpp-element-id]
+                        element.setAttribute(`data-webpp-element-id`, uniqueElementId)
+
+                        // Add js for the event listener
+                        js += `
+                        /* Begin JS for event listener ${attrName} */
+                        ;(function _(){
+                            // Get the element
+                            let __webppcelement=document.querySelector("[data-webpp-element-id='${uniqueElementId}']");
+                            // Add event listener
+                            __webppcelement.addEventListener("${attrName.substring(1)}",function(event){
+                                ;let target=__webppcelement;
+                                ;${element.getAttribute(attrName)};
+                            });
+                        }).bind(window)();
+                        /* End JS for event listener ${attrName} */
+                        `
+
+                        // Remove the attribute
+                        element.removeAttribute(attrName)
+
                     }
                 }
-
-                if (needToReAssignProps) {
-                    return `<${elemName} ${stringifyProps(elemPropsObj)}>`
-                }
-
-                return match	
-            })
-
-            // Parse other components
-            componentContent = parseHTML_(componentContent)
-
-            // Create Virtual DOM from component
-            const componentDOM = new JSDOM(componentContent)
-
-            // Get style
-            let style = (componentDOM.window.document.querySelector('style') || { innerHTML: '' }).innerHTML
-
-            // Replace #({ PROP }) in the style with props
-            style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
-                propKey = propKey.trim()
-
-                return componentProps[propKey]
-            })
-
-            // Scope the style
-            style = scopeStyle(style, componentId)
-
-            // Add the style to the css
-            css += `
-            /* Beginning of styles for the ${componentName} component */
-            ${style}
-            /* End of styles for the ${componentName} component */
-            `
-
-            let jsFromDom = (componentDOM.window.document.querySelector('script') || { innerHTML: '' }).innerHTML
-            let sjs = `
-            /* Beginning of script for the ${componentName} component */
-            ;(function _() {
-                // Add component to __MountedWebPPComponents__
-                ;__MountedWebPPComponents__["${componentId}"] = ${JSON.stringify({
-                    id: componentId,
-                    name: componentName,
-                    props: componentProps
-                })};
-                ;__MountedWebPPComponents__["${componentId}"].element=document.querySelector("#${componentId}");
-                ;__MountedWebPPComponents__["${componentId}"].querySelector=function querySelector(selector){
-                    return document.querySelector("#${componentId}").querySelector(selector);
-                };
-                ;__MountedWebPPComponents__["${componentId}"].querySelectorAll=function querySelectorAll(selector){
-                    return document.querySelector("#${componentId}").querySelectorAll(selector);
-                };
-                ;__MountedWebPPComponents__["${componentId}"].$=__MountedWebPPComponents__["${componentId}"].querySelector;
-                ;__MountedWebPPComponents__["${componentId}"].$$=__MountedWebPPComponents__["${componentId}"].querySelectorAll;
-                ;__MountedWebPPComponents__["${componentId}"].define=function define(obj){
-                    ;__MountedWebPPComponents__["${componentId}"]=__WEBPP_HELPER_mergeObjects(__MountedWebPPComponents__["${componentId}"],obj);
-                    ;__MountedWebPPComponents__["${componentId}"].mounted();
-                };
-
-                // Make Component variable available
-                ;let Component=__MountedWebPPComponents__["${componentId}"];
-
-                // Real JS
-                ;${jsFromDom};
-            })();
-            /* End of script for the ${componentName} component */
-            `
-
-            // Get template
-            let template = (componentDOM.window.document.querySelector('template') || { innerHTML: '<h1>Add a template tag to display content!</h1>' }).innerHTML
-
-            // Replace #({ PROP }) in the template with props
-            template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
-                propKey = propKey.trim()
-
-                return componentProps[propKey]
-            })
-
-            // Parse libs
-            let componentLibs = []
-            if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
-                componentLibs = (componentDOM.window.document.querySelector('libs') || { innerHTML: '' }).innerHTML.trim().split(',').map(e => e.trim())
             }
-            if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
-            libsToInclude = libsToInclude.concat(componentLibs)
 
-            let componentHTML = `
-                <div id="${componentId}">
-                    ${template}
-                </div>
+            // Create html from DOM
+            return `
+            ${vdom.window.document.querySelector('head').innerHTML}
+
+
+            ${vdom.window.document.querySelector('body').innerHTML}
             `
-
-            js += sjs
-            return componentHTML
-        })
-    }
-
-    function parseHTML_(htc) {
-        // Parse Components
-        htc = parseComponents(htc)
-
-        // Create Virtual DOM
-        const vdom = new JSDOM(htc)
-
-        // Get every element
-        const elements = vdom.window.document.querySelectorAll('*')
-
-        for (const element of elements) {
-            const attrNames = element.getAttributeNames()
-
-            for (const attrName of attrNames) {
-                // Check if attribute starts with @
-                if (attrName.startsWith('@')) {
-                    // Assign a id
-                    const uniqueElementId = `webpp-element-with-id-${uuid()}-${uuid()}`
-
-                    // Add the id to the element as [data-webpp-element-id]
-                    element.setAttribute(`data-webpp-element-id`, uniqueElementId)
-
-                    // Add js for the event listener
-                    js += `
-                    /* Begin JS for event listener ${attrName} */
-                    ;(function _(){
-                        // Get the element
-                        let __webppcelement=document.querySelector("[data-webpp-element-id='${uniqueElementId}']");
-                        // Add event listener
-                        __webppcelement.addEventListener("${attrName.substring(1)}",function(event){
-                            ;let target=__webppcelement;
-                            ;${element.getAttribute(attrName)};
-                        });
-                    }).bind(window)();
-                    /* End JS for event listener ${attrName} */
-                    `
-
-                    // Remove the attribute
-                    element.removeAttribute(attrName)
-
-                }
-            }
         }
 
-        // Create html from DOM
-        return `
-        ${vdom.window.document.querySelector('head').innerHTML}
+        content = parseHTML_(content)
 
 
-        ${vdom.window.document.querySelector('body').innerHTML}
-        `
-    }
+        // Make sure every element in libs is unique & fetch libs
+        libsToInclude = [...new Set(libsToInclude)]
+        for (let lib of libsToInclude) {
+            lib = `${lib}`.trim()
 
-    content = parseHTML_(content)
-
-
-    // Make sure every element in libs is unique & fetch libs
-    libsToInclude = [...new Set(libsToInclude)]
-    for (let lib of libsToInclude) {
-        lib = `${lib}`.trim()
-
-        await resolveLibrary(lib, projectdir, pagePath, {
-            fetchJs: async (url) => {
-                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
-                const fetched = await cachify(fetchedJsDir, sanitizedURL, url)
-                mjs += `
-                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ;((function m(){
-
-                ${fetched}
-
-                }).bind(window))();
-                /* End of ${lib} */
-                `
-            },
-            fetchCss: async (url) => {
-                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
-                const fetched = await cachify(fetchedCssDir, sanitizedURL, url)
-                css += `
-                /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                ${fetched}
-                /* End of ${lib} */
-                `
-            },
-            fetchAndDetectType: async (url) => {
-                const type = await cacheContentType(url)
-                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
-                const response = await cachify(fetchedAndDetectedDir, `__FADCACHE__${sanitizedURL}`, url)
-
-                if (type === 'js') {
+            await resolveLibrary(lib, projectdir, pagePath, {
+                fetchJs: async (url) => {
+                    const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                    const fetched = await cachify(fetchedJsDir, sanitizedURL, url)
                     mjs += `
                     /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                    ;(function m(){
+                    ;((function m(){
 
-                    ${response}
+                    ${fetched}
 
-                    }).bind(window)();
+                    }).bind(window))();
                     /* End of ${lib} */
                     `
-                } else if (type === 'css') {
+                },
+                fetchCss: async (url) => {
+                    const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                    const fetched = await cachify(fetchedCssDir, sanitizedURL, url)
                     css += `
                     /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                    ${response}
+                    ${fetched}
                     /* End of ${lib} */
                     `
+                },
+                fetchAndDetectType: async (url) => {
+                    const type = await cacheContentType(url)
+                    const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                    const response = await cachify(fetchedAndDetectedDir, `__FADCACHE__${sanitizedURL}`, url)
+
+                    if (type === 'js') {
+                        mjs += `
+                        /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                        ;(function m(){
+
+                        ${response}
+
+                        }).bind(window)();
+                        /* End of ${lib} */
+                        `
+                    } else if (type === 'css') {
+                        css += `
+                        /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
+                        ${response}
+                        /* End of ${lib} */
+                        `
+                    }
+                },
+                addHead: (htmlToWriteToHead) => {
+                    libHead += `
+                    <!-- Beginning of ${lib} which was added to head at ${new Date()} -->
+                    ${htmlToWriteToHead}
+                    <!-- End of ${lib} -->
+                    `
                 }
-            },
-            addHead: (htmlToWriteToHead) => {
-                libHead += `
-                <!-- Beginning of ${lib} which was added to head at ${new Date()} -->
-                ${htmlToWriteToHead}
-                <!-- End of ${lib} -->
-                `
-            }
-        })
-    }
+            })
+        }
 
-    // Create Virtual DOM from content
-    const dom = new JSDOM(content)
-    const { document } = dom.window
+        // Create Virtual DOM from content
+        const dom = new JSDOM(content)
+        const { document } = dom.window
 
-    // Get title element & remove every title element from content
-    let title = 'Add a <title> tag to change the title'
-    for (const givenTitle of document.querySelectorAll('title')) {
-        title = givenTitle.innerHTML
-        givenTitle.remove()
-    }
+        // Get title element & remove every title element from content
+        let title = 'Add a <title> tag to change the title'
+        for (const givenTitle of document.querySelectorAll('title')) {
+            title = givenTitle.innerHTML
+            givenTitle.remove()
+        }
 
-    // Get style emlements & remove every style element from content
-    for (const styleElem of document.querySelectorAll('style')) {
-        css += `
-        /* Beginning of an inline style element which was added to head at ${new Date()} */
-        ${styleElem.innerHTML}
-        /* End of an inline style element */
-        `
-        styleElem.remove()
-    }
+        // Get style emlements & remove every style element from content
+        for (const styleElem of document.querySelectorAll('style')) {
+            // Get lang
+            const lang = styleElem.getAttribute('lang') || 'css'
 
-    // Get script elements & remove every script element from content
-    for (const scriptElem of document.querySelectorAll('script')) {
-        // If the script has no src attribute, it is inline
-        if (!scriptElem.hasAttribute('src')) {
-            js += `
-            /* Beginning of an inline script element which was added to head at ${new Date()} */
-            ${scriptElem.innerHTML}
-            /* End of an inline script element */
-            `
+            styleElem.innerHTML = styleElem.innerHTML.trim()
 
-            scriptElem.remove()
-        } else {
-            // If the script has a src attribute, it is external
-            const src = scriptElem.getAttribute('src')
-            if (src.endsWith('.ts')) {
-                js += `
-                /* Beginning of an external script element which was added to head at ${new Date()} */
-                ;(function m(){
+            if (lang === 'css') {
+                // Already css, no further step required
+            } else if (lang === 'sass') {
+                // Convert sass to css
+                const rsass = styleElem.innerHTML
+                const fname = path.join(pagePath, `$inlinesheet-${uuid()}.sass`)
 
-                ${parseTypeScript(await fs.promises.readFile(path.join(pagePath, src), 'utf8'), src, pagePath)}
+                // Write sass to file
+                fs.writeFileSync(fname, rsass)
 
-                })();
-                /* End of an external script element */
-                `
+                // Compile sass
+                let compiledCss = ''
+                try {
+                    compiledCss = sass.compile(fname).css
+                } catch (e) {
+                    fs.unlinkSync(fname)
+                    throw e
+                }
+
+                // Replace style with css
+                styleElem.innerHTML = compiledCss  
+                
+                // Remove file
+                fs.unlinkSync(fname)
+            } else if (lang === 'scss') {
+                // Convert sass to css
+                const scss = styleElem.innerHTML
+                const fname = path.join(pagePath, `$inlinesheet-${uuid()}.scss`)
+
+                // Write sass to file
+                fs.writeFileSync(fname, scss)
+
+                // Compile sass
+                let compiledCss = ''
+                try {
+                    compiledCss = sass.compile(fname).css
+                } catch (e) {
+                    fs.unlinkSync(fname)
+                    throw e
+                }
+
+                // Replace style with css
+                styleElem.innerHTML = compiledCss
+
+                // Remove file
+                fs.unlinkSync(fname)
             } else {
-                js += `
-                /* Beginning of an external script element which was added to head at ${new Date()} */
-                ;(function m(){
-
-                ${await fs.promises.readFile(path.join(pagePath, src), 'utf8')}
-
-                })();
-                /* End of an external script element */
-                `
+                // Unknown lang
+                console.error(chalk.red(`Unknown stylesheet lang: ${lang}`))
             }
 
-            scriptElem.remove()
+            css += `
+            /* Beginning of an inline style element which was added to head at ${new Date()} */
+            ${styleElem.innerHTML}
+            /* End of an inline style element */
+            `
+            styleElem.remove()
         }
-    }
 
-    // Assign content to html from Virtual DOM
-    content = document.body.innerHTML
-    let shouldBeInHead = document.head.innerHTML
+        // Get script elements & remove every script element from content
+        for (const scriptElem of document.querySelectorAll('script')) {
+            // If the script has no src attribute, it is inline
+            if (!scriptElem.hasAttribute('src')) {
+                js += `
+                /* Beginning of an inline script element which was added to head at ${new Date()} */
+                ${scriptElem.innerHTML}
+                /* End of an inline script element */
+                `
 
-    // Set externalfile html
-    let externalFileHTML = ''
+                scriptElem.remove()
+            } else {
+                // If the script has a src attribute, it is external
+                const src = scriptElem.getAttribute('src')
+                if (src.endsWith('.ts')) {
+                    js += `
+                    /* Beginning of an external script element which was added to head at ${new Date()} */
+                    ;(function m(){
 
-    // Add tsContent to js
-    js += parseTypeScript(tsContent, 'script.ts', pagePath)
+                    ${parseTypeScript(await fs.promises.readFile(path.join(pagePath, src), 'utf8'), src, pagePath)}
 
-    // Add jsContent to js
-    js += jsContent
+                    })();
+                    /* End of an external script element */
+                    `
+                } else {
+                    js += `
+                    /* Beginning of an external script element which was added to head at ${new Date()} */
+                    ;(function m(){
 
-    // Merge mjs and js
-    js = mjs + js
+                    ${await fs.promises.readFile(path.join(pagePath, src), 'utf8')}
 
-    // Use Babel to transpile js
-    if (!compilerOptions.dev) {
-        // Don't transpile in dev mode
-        js = babel.transformSync(js, {
-            presets: [
-                '@babel/preset-env'
-            ],
-            cwd: pagePath
-        }).code
-    }
+                    })();
+                    /* End of an external script element */
+                    `
+                }
 
-    // Minify js
-    if (compilerOptions.minify) {
-        js = minifyHTML(`<script>${js}</script>`, {
-            collapseWhitespace: true,
-            minifyJS: true
-        })
-        js = js.substring(8, js.length - 9)
-    }
-    
+                scriptElem.remove()
+            }
+        }
 
-    // Add cssContent to css
-    css += cssContent
+        // Assign content to html from Virtual DOM
+        content = document.body.innerHTML
+        let shouldBeInHead = document.head.innerHTML
 
-    // Minify css
-    if (compilerOptions.minify) {
-        css = minifyHTML(`<style>${css}</style>`, {
-            collapseWhitespace: true,
-            minifyCSS: true
-        }).replace('<style>', '').replace('</style>', '')
-    }
+        // Set externalfile html
+        let externalFileHTML = ''
 
-    // Combine repeating css into one css block
-    // a {color:#fff}h1{color:#fff} => a,h1{color:#fff}
-    let repeatingCssBlocks = {
-        // cssBlock: [...selectors]
-    }
+        // Add tsContent to js
+        js += parseTypeScript(tsContent, 'script.ts', pagePath)
 
-    css = css.replace(/(.*?){(.*?)}/g, (match, selector, cssBlock) => {
-        if (!repeatingCssBlocks[cssBlock.trim()]) repeatingCssBlocks[cssBlock.trim()] = []
-        repeatingCssBlocks[cssBlock.trim()].push(selector)
+        // Add jsContent to js
+        js += jsContent
 
-        return ''
-    })
+        // Merge mjs and js
+        js = mjs + js
 
-    for (const cssBlock in repeatingCssBlocks) {
-        repeatingCssBlocks[cssBlock] = [...new Set(repeatingCssBlocks[cssBlock])]
+        // Use Babel to transpile js
+        if (!compilerOptions.dev) {
+            // Don't transpile in dev mode
+            js = babel.transformSync(js, {
+                presets: [
+                    '@babel/preset-env'
+                ],
+                cwd: pagePath
+            }).code
+        }
 
-        const selectors = repeatingCssBlocks[cssBlock].join(',')
-        css += `${selectors}{${cssBlock}}`
-    }
-
-
-    // Singlefile
-    if (singleFile) {
-        externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
-    } else {
-        externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-        <script defer src="${pageIdentifier}.js"></script>`
-    }
-
-    // Dev scripts to inject
-    let devScripts = ''
-    if (compilerOptions.dev) {
-        // Start live reload server if not already started
-        if (!global.liveReloadServer) {
-            // deepcode ignore HttpToHttps: No need to use HTTPS for a Dev Server
-            const http = require('http')
-            const WebSocketServer = require('websocket').server
-            const server = http.createServer()
-            const serverPort = 989 + Math.floor(Math.random() * 1000)
-            server.listen(serverPort)
-
-            const wsServer = new WebSocketServer({
-                httpServer: server
+        // Minify js
+        if (compilerOptions.minify) {
+            js = minifyHTML(`<script>${js}</script>`, {
+                collapseWhitespace: true,
+                minifyJS: true
             })
+            js = js.substring(8, js.length - 9)
+        }
+        
 
-            global.liveReloadServer = {
-                httpServer: server,
-                wsServer,
-                serverPort,
-                connections: [],
-                sendData (data) {
-                    for (const connection of global.liveReloadServer.connections) {
-                        connection.sendUTF(JSON.stringify(data))
+        // Add cssContent to css
+        css += cssContent
+
+        // Minify css
+        if (compilerOptions.minify) {
+            css = minifyHTML(`<style>${css}</style>`, {
+                collapseWhitespace: true,
+                minifyCSS: true
+            }).replace('<style>', '').replace('</style>', '')
+        }
+
+        // Combine repeating css into one css block
+        // a {color:#fff}h1{color:#fff} => a,h1{color:#fff}
+        let repeatingCssBlocks = {
+            // cssBlock: [...selectors]
+        }
+
+        css = css.replace(/(.*?){(.*?)}/g, (match, selector, cssBlock) => {
+            if (!repeatingCssBlocks[cssBlock.trim()]) repeatingCssBlocks[cssBlock.trim()] = []
+            repeatingCssBlocks[cssBlock.trim()].push(selector)
+
+            return ''
+        })
+
+        for (const cssBlock in repeatingCssBlocks) {
+            repeatingCssBlocks[cssBlock] = [...new Set(repeatingCssBlocks[cssBlock])]
+
+            const selectors = repeatingCssBlocks[cssBlock].join(',')
+            css += `${selectors}{${cssBlock}}`
+        }
+
+
+        // Singlefile
+        if (singleFile) {
+            externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
+        } else {
+            externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
+            <script defer src="${pageIdentifier}.js"></script>`
+        }
+
+        // Dev scripts to inject
+        let devScripts = ''
+        if (compilerOptions.dev) {
+            // Start live reload server if not already started
+            if (!global.liveReloadServer) {
+                // deepcode ignore HttpToHttps: No need to use HTTPS for a Dev Server
+                const http = require('http')
+                const WebSocketServer = require('websocket').server
+                const server = http.createServer()
+                const serverPort = 989 + Math.floor(Math.random() * 1000)
+                server.listen(serverPort)
+
+                const wsServer = new WebSocketServer({
+                    httpServer: server
+                })
+
+                global.liveReloadServer = {
+                    httpServer: server,
+                    wsServer,
+                    serverPort,
+                    connections: [],
+                    sendData (data) {
+                        for (const connection of global.liveReloadServer.connections) {
+                            connection.sendUTF(JSON.stringify(data))
+                        }
                     }
                 }
+
+                wsServer.on('request', function (request) {
+                    const connection = request.accept(null, request.origin)
+
+                    global.liveReloadServer.connections.push(connection)
+
+                    global.liveReloadServer.sendData({ hi: true })
+
+                    connection.on('close', function (reasonCode, description) {
+                        // Client just disconnected
+                    })
+                })
             }
 
-            wsServer.on('request', function (request) {
-                const connection = request.accept(null, request.origin)
+            // Inject live reload
+            devScripts += `
+                <script defer>
+                    const _ws = new WebSocket("ws://localhost:${global.liveReloadServer.serverPort}/");
 
-                global.liveReloadServer.connections.push(connection)
+                    _ws.onopen = function() {
+                        console.log("[Webpp] Live-Reload activated");
+                    };
 
-                global.liveReloadServer.sendData({ hi: true })
+                    _ws.onmessage = function(e) {
+                        var data = JSON.parse(e.data);
+                        
+                        if (data.action === "PAGE_RELOAD") {
+                            setTimeout(function rlPage(){
+                                location.reload();
+                            },200);
+                        } else if (data.action === "CONSOLE_LOG") {
+                            console.log(data.message);
+                        }
+                    };
+                </script>
+            `
+        }
 
-                connection.on('close', function (reasonCode, description) {
-                    // Client just disconnected
-                })
+        // Create HTML
+        html = `
+        <!DOCTYPE html>
+        <html lang="${pageLang}">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>${title}</title>
+
+            <!-- External files -->
+            ${externalFileHTML}
+
+            <!-- Head from Virtual DOM -->
+            ${shouldBeInHead}
+
+            <!-- Embedded libraries -->
+            ${libHead}
+
+            <!-- Injected dev scripts -->
+            ${devScripts}
+        </head>
+        <body>
+            <noscript>
+                <div style="font-family:sans-serif;position:fixed;z-index:1000000;top:0;left:0;width:100vw;height:100vh;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;text-align:center;">
+                    <h1>${(pageLang.includes('de') || pageLang.includes('german')) ? 'Bitte aktivieren Sie Javascript in Ihrem Browser, um diese Seite anzuzeigen!' : 'Please enable Javascript in your browser to view this page!'}</h1>
+                </div>
+            </noscript>
+            ${content}
+        </body>
+        </html>
+        `
+
+        // Minify HTML
+        if (compilerOptions.minify) {
+            html = minifyHTML(html, {
+                collapseWhitespace: true,
+                removeComments: true,
+                minifyCSS: true,
+                minifyJS: true
             })
         }
 
-        // Inject live reload
-        devScripts += `
-            <script defer>
-                const _ws = new WebSocket("ws://localhost:${global.liveReloadServer.serverPort}/");
+        // Write outputs
+        if (singleFile) {
+            await fs.promises.writeFile(htmlPath, html)
+        } else {
+            await fs.promises.writeFile(htmlPath, html)
+            await fs.promises.writeFile(cssPath, css)
+            await fs.promises.writeFile(jsPath, js)
+        }
 
-                _ws.onopen = function() {
-                    console.log("[Webpp] Live-Reload activated");
-                };
+        global.currentCompilingPages[pagePath] = false
+        
+        const timeSinceStartInMs = Date.now() - startTimeStamp
 
-                _ws.onmessage = function(e) {
-                    var data = JSON.parse(e.data);
-                    
-                    if (data.action === "PAGE_RELOAD") {
-                        setTimeout(function rlPage(){
-                            location.reload();
-                        },200);
-                    } else if (data.action === "CONSOLE_LOG") {
-                        console.log(data.message);
-                    }
-                };
-            </script>
-        `
-    }
+        console.log(chalk.green(`Compiled ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))} in ${chalk.yellow(timeSinceStartInMs / 1000 + 's')}`))
 
-    // Create HTML
-    html = `
-    <!DOCTYPE html>
-    <html lang="${pageLang}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>${title}</title>
+        // Reload page if in Dev Mode
+        if (compilerOptions.dev) {
+            global.liveReloadServer.sendData({
+                action: 'PAGE_RELOAD'
+            })
+        }
+    } catch (err) {
+        console.log(chalk.red(`Error compiling ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))}`))
 
-        <!-- External files -->
-        ${externalFileHTML}
+        const AnsiConvert = require('ansi-to-html')
+        const ansiConverter = new AnsiConvert()
+        const parsedErrMessage = ansiConverter.toHtml(err.message
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>'))
+        
+        const parsedErrStack = ansiConverter.toHtml(err.stack
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>'))
 
-        <!-- Head from Virtual DOM -->
-        ${shouldBeInHead}
+        // Error occured
+        await fs.promises.writeFile(htmlPath, `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Error</title>
 
-        <!-- Embedded libraries -->
-        ${libHead}
+                <script defer>
+                    const _ws = new WebSocket("ws://localhost:${(global.liveReloadServer || { serverPort: 88 }).serverPort}/");
 
-        <!-- Injected dev scripts -->
-        ${devScripts}
-    </head>
-    <body>
-        <noscript>
-            <div style="font-family:sans-serif;position:fixed;z-index:1000000;top:0;left:0;width:100vw;height:100vh;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;text-align:center;">
-                <h1>${(pageLang.includes('de') || pageLang.includes('german')) ? 'Bitte aktivieren Sie Javascript in Ihrem Browser, um diese Seite anzuzeigen!' : 'Please enable Javascript in your browser to view this page!'}</h1>
-            </div>
-        </noscript>
-        ${content}
-    </body>
-    </html>
-    `
+                    _ws.onopen = function() {
+                        console.log("[Webpp] Live-Reload activated");
+                    };
 
-    // Minify HTML
-    if (compilerOptions.minify) {
-        html = minifyHTML(html, {
-            collapseWhitespace: true,
-            removeComments: true,
-            minifyCSS: true,
-            minifyJS: true
-        })
-    }
+                    _ws.onmessage = function(e) {
+                        var data = JSON.parse(e.data);
 
-    // Write outputs
-    if (singleFile) {
-        await fs.promises.writeFile(htmlPath, html)
-    } else {
-        await fs.promises.writeFile(htmlPath, html)
-        await fs.promises.writeFile(cssPath, css)
-        await fs.promises.writeFile(jsPath, js)
-    }
+                        if (data.action === "PAGE_RELOAD") {
+                            setTimeout(function rlPage(){
+                                location.reload();
+                            },200);
+                        } else if (data.action === "CONSOLE_LOG") {
+                            console.log(data.message);
+                        }
+                    };
+                </script>
+            </head>
+            <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;flex-direction:column;background:#000;color:#fff;">
+                <h1>Error</h1>
 
-    global.currentCompilingPages[pagePath] = false
-    
-    const timeSinceStartInMs = Date.now() - startTimeStamp
+                <pre style="display:block;padding:2%;background:#8f9095;border-radius:10px;color:#fff;">${parsedErrMessage}</pre>
 
-    console.log(chalk.green(`Compiled ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))} in ${chalk.yellow(timeSinceStartInMs / 1000 + 's')}`))
+                <br>
+                <br>
 
-    // Reload page if in Dev Mode
-    if (compilerOptions.dev) {
-        global.liveReloadServer.sendData({
-            action: 'PAGE_RELOAD'
-        })
+                <pre style="display:block;padding:2%;background:#8f9095;border-radius:10px;color:#fff;">${parsedErrStack}</pre>
+            </body>
+        `)
+
+        global.currentCompilingPages[pagePath] = false
+
+        if (global.liveReloadServer) {
+            global.liveReloadServer.sendData({
+                action: 'PAGE_RELOAD'
+            })
+        }
+
+        return false
     }
 
     return true
