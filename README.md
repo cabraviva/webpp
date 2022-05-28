@@ -30,6 +30,7 @@ I created webpp because I wanted:
 - To use frameworks without having to include them in every html file
 - To use event listeners in my HTML instead of defining them in the JS
 - To create static websites
+- Super fast dev builds (maximum of 500ms)
 
 # Project Structure
 
