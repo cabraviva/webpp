@@ -128,6 +128,66 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         let mjs = ''
         let libsToInclude = manifest.use || []
 
+        // Prejs
+        const prejs = `
+            /* Start Prejs */
+            /* useState */
+            ;window.useState=function useState(initialValue){
+                let lastValue = initialValue
+                let value = initialValue
+
+                let stateHook = [null, null]
+                stateHook._effectDependencies = []
+                stateHook.useEffect = function(...dependencies){
+                    stateHook._effectDependencies = stateHook._effectDependencies.concat(dependencies)
+                    return stateHook
+                }
+                stateHook.touch = function(){
+                    for (const dependency of stateHook._effectDependencies) {
+                        dependency(value, lastValue)
+                    }
+                }
+
+                const stateChange = () => {
+                    if (value === lastValue) return // No change
+                    stateHook.touch()
+                }
+
+                const getter = () => {
+                    let returnValue = value
+
+                    returnValue.__proto__.useEffect = stateHook.useEffect
+                    returnValue.__proto__._effectDependencies = stateHook._effectDependencies
+                    returnValue.__proto__.touch = stateHook.touch
+
+                    return returnValue
+                }
+
+                getter.__proto__.set = function(newValue){
+                    lastValue = value
+                    value = newValue
+                    stateChange()
+                }
+                getter.__proto__.get = () => value
+                getter.__proto__.useEffect = stateHook.useEffect
+                getter.__proto__._effectDependencies = stateHook._effectDependencies
+                getter.__proto__.touch = stateHook.touch
+
+                const setter = newValue => {
+                    lastValue = value
+                    value = newValue
+                    stateChange()
+                    return value
+                }
+
+                stateHook[0] = getter
+                stateHook[1] = setter
+
+                return stateHook                
+            };
+            /* End   Prejs */
+        `
+
         // Render components
         // Components are saved in the @Components folder in the projectdir
         function parseComponents ($content) {
@@ -564,10 +624,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         js += jsContent
 
         // Merge mjs and js
-        js = mjs + js
-
-        // Defer js & top level await
-        js = `window.addEventListener("DOMContentLoaded",(async function(){${js}}).bind(window));`
+        js = prejs + mjs + js
 
         // Use Babel to transpile js
         if (!compilerOptions.dev) {
@@ -623,10 +680,10 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         // Singlefile
         if (singleFile) {
-            externalFileHTML = `<style>${css}</style><script>${js}</script>`
+            externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
         } else {
             externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-            <script src="${pageIdentifier}.js"></script>`
+            <script defer src="${pageIdentifier}.js"></script>`
         }
 
         // Dev scripts to inject
