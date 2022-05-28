@@ -422,6 +422,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             }
 
             // Reactivity
+            // innerHTML
             vdom.window.document.body.innerHTML = (' ' + vdom.window.document.body.innerHTML).replace(/([^"]){{(.*?)}}/gms, (match, c1, jsy) => {
                 jsy = jsy.trim()
                 const id = uuid()
@@ -448,6 +449,47 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
                 return `${c1}<span data-webpp-jsy-out-id="${id}"></span>`
             })
+            // Attributes
+            for (const element of vdom.window.document.querySelectorAll('*')) {
+                const attrNames = element.getAttributeNames()
+
+                for (const attrName of attrNames) {
+                    // TODO: bind:*=""
+
+                    // Get attr value
+                    const attrValue = element.getAttribute(attrName)
+
+                    // Set attr
+                    element.setAttribute(attrName, attrValue.replace(/^{{(.*?)}}$/gms, (match, jsy) => {
+                        jsy = jsy.trim()
+                        const id = uuid()
+                        const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
+
+                        element.setAttribute(`webpp-jsy-out-on-attr-for-${attrName}`, id)
+
+                        suffixJs += `
+                            ;(function(){
+                                let __webppcurrentjsyelement = document.querySelector('[webpp-jsy-out-on-attr-for-${attrName}="${id}"]');
+                                let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
+                                if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                                    /* It's a state */
+                                    __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                                }
+                                if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
+                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned.__webpp_jsy_getter());
+                                    __webpp_jsy_returned.__webpp_jsy_effect(function(v,oldv){
+                                        __webppcurrentjsyelement.setAttribute("${attrName}", v);
+                                    });
+                                } else {
+                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned);
+                                }
+                            })();
+                        `
+
+                        return ''
+                    }))
+                }
+            }
 
             // Create html from DOM
             return `

@@ -91,7 +91,7 @@ function useDevServer () {
 
     const app = express()
 
-    const port = 489 + Math.floor(Math.random() * 1000)
+    const port = 1260 + Math.floor(Math.random() * 1000)
 
     app.use(express.static(projectdir))
 
