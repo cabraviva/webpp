@@ -2,7 +2,7 @@ const path = require('path')
 const fs = require('fs')
 const YAML = require('yaml')
 const minifyHTML = require('html-minifier').minify
-const axios = require('axios')
+const browserify = require('browserify')
 const chalk = require('chalk')
 const uuid = require('uuid').v4
 const { JSDOM } = require('jsdom')
@@ -14,6 +14,9 @@ const { parseProps, stringifyProps } = require('./props-parser')
 const { getWebppFolders } = require('./webpp-folder')
 const { cacheContentType } = require('./validationCache')
 const resolveLibrary = require('./resolve-lib')
+function btoa(str) {
+    return Buffer.from(str).toString('base64')
+}
 
 const os = require('os')
 const homedir = os.homedir()
@@ -35,6 +38,32 @@ if (!fs.existsSync(isValidNPMPackageDir)) fs.mkdirSync(isValidNPMPackageDir)
 if (!fs.existsSync(isValidURLDir)) fs.mkdirSync(isValidURLDir)
 if (!fs.existsSync(contentTypeCacheDir)) fs.mkdirSync(contentTypeCacheDir)
 if (!fs.existsSync(fetchedAndDetectedDir)) fs.mkdirSync(fetchedAndDetectedDir)
+
+const useBrowserify = async (dir, $js) => {
+    const bundleBrowserify = (b) => {
+        return new Promise((resolve, reject) => {
+            b.bundle((err, res) => {
+                if (err) reject(err)
+                resolve(res)
+            })
+        })
+    }
+
+    const b = browserify()
+    const bundlingScriptName = `$bundle-${uuid()}.js`
+    fs.writeFileSync(path.join(dir, bundlingScriptName), $js)
+    b.add(path.join(dir, bundlingScriptName))
+    let bundledJs = $js
+    try {
+        bundledJs = await bundleBrowserify(b)
+    } catch (err) {
+        fs.unlinkSync(path.join(dir, bundlingScriptName))
+        throw err
+    }
+    fs.unlinkSync(path.join(dir, bundlingScriptName))
+
+    return bundledJs
+}
 
 async function compilePage (pagePath, parent, projectdir, compilerOptions = { dev: false }) {
     // Do not compile if already compiling
@@ -417,10 +446,6 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 }
             }
 
-            function btoa (str) {
-                return Buffer.from(str).toString('base64')
-            }
-
             // Reactivity
             // innerHTML
             vdom.window.document.body.innerHTML = (' ' + vdom.window.document.body.innerHTML).replace(/([^"]){{(.*?)}}/gms, (match, c1, jsy) => {
@@ -725,14 +750,29 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         // Set externalfile html
         let externalFileHTML = ''
 
-        // Add tsContent to js
-        js += parseTypeScript(tsContent, 'script.ts', pagePath)
+        // Add tsContent to js & browserify it
+        js += await useBrowserify(pagePath, parseTypeScript(tsContent, 'script.ts', pagePath))
+
+        // Browserify jsContent
+        jsContent = await useBrowserify(pagePath, jsContent)
 
         // Add jsContent to js
         js += jsContent
 
         // Merge mjs and js
         js = prejs + mjs + js + suffixJs
+
+        // Expose the `$expose()`d
+        js = js.replace(/\$expose(\s*?)\((.*?)\)/gms, (match, ws1, nameToExpose) => {
+            return `;window[atob("${btoa(nameToExpose)}")]=${nameToExpose};`
+        })
+
+        // Make states global
+        js = js.replace(/(const|var|let)(\s*?)\[(.*?)\](\s*)=(\s*?)useState\((.*?)\)/gms, (match, varKW, ws1, stateNameStrList, ws2, ws3, initialState) => {
+            const nameArray = stateNameStrList.split(',').map(x => x.trim())
+            const primaryName = nameArray[0]
+            return `${varKW} [${stateNameStrList}] = useState(${initialState});window[atob("${btoa(primaryName)}")]=${primaryName};`
+        })
 
         // Use Babel to transpile js
         if (!compilerOptions.dev) {

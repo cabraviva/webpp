@@ -45,6 +45,9 @@ async function useWatcher (firstCompileCallback = () => {}) {
             return
         }
 
+        if (path.includes('$bundle')) return
+        if (path.includes('$inlinesheet')) return
+
         await compile(argvString, { dev: true }, [path])
 
         if (isFirstCompilation) {
