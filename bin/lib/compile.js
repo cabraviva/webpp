@@ -77,6 +77,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             }, {});
         }
         `
+        let suffixJs = ''
 
         // Read files
         let manifest = ''
@@ -127,6 +128,62 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         let libHead = ''
         let mjs = ''
         let libsToInclude = manifest.use || []
+
+        // Prejs
+        const prejs = `
+            /* Start Prejs */
+
+            /* Coded Eval */
+            ;window.__WEBPP_CODED_eval=function evaluate(codedCode){return eval(atob(codedCode));};
+            
+            /* useState */
+            ;window.useState=function useState(initialValue){
+                let lastValue = initialValue
+                let value = initialValue
+
+                let stateHook = [null, null]
+                stateHook._effectDependencies = []
+                stateHook.useEffect = function(...dependencies){
+                    stateHook._effectDependencies = stateHook._effectDependencies.concat(dependencies)
+                    return stateHook
+                }
+                stateHook.touch = function(){
+                    for (const dependency of stateHook._effectDependencies) {
+                        dependency(value, lastValue)
+                    }
+                }
+
+                const stateChange = () => {
+                    if (value === lastValue) return // No change
+                    stateHook.touch()
+                }
+
+                const getter = () => value
+
+                const setter = newValue => {
+                    lastValue = value
+                    value = newValue
+                    stateChange()
+                    return value
+                }
+
+                getter.set = (newValue) => setter(newValue)
+                getter.get = () => getter()
+                getter.useEffect = stateHook.useEffect
+                getter._effectDependencies = stateHook._effectDependencies
+                getter.touch = stateHook.touch
+                getter.__webpp_jsy_getter = getter.get
+                getter.__webpp_jsy_setter = getter.set
+                getter.__webpp_jsy_effect = stateHook.useEffect
+
+                stateHook[0] = getter
+                stateHook[1] = setter
+
+                return stateHook                
+            };
+
+            /* End   Prejs */
+        `
 
         // Render components
         // Components are saved in the @Components folder in the projectdir
@@ -360,6 +417,117 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 }
             }
 
+            function btoa (str) {
+                return Buffer.from(str).toString('base64')
+            }
+
+            // Reactivity
+            // innerHTML
+            vdom.window.document.body.innerHTML = (' ' + vdom.window.document.body.innerHTML).replace(/([^"]){{(.*?)}}/gms, (match, c1, jsy) => {
+                jsy = jsy.trim()
+                const id = uuid()
+                const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
+
+                suffixJs += `
+                    ;(function(){
+                        let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-id="${id}"]');
+                        let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
+                        if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                            /* It's a state */
+                            __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                        }
+                        if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
+                            __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned.__webpp_jsy_getter();
+                            __webpp_jsy_returned.__webpp_jsy_effect(function(v,oldv){
+                                __webppcurrentjsyelement.innerHTML = v;
+                            });
+                        } else {
+                            __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned;
+                        }
+                    })();
+                `
+
+                return `${c1}<span data-webpp-jsy-out-id="${id}"></span>`
+            })
+            // Attributes
+            for (const element of vdom.window.document.querySelectorAll('*')) {
+                const attrNames = element.getAttributeNames()
+
+                for (const attrName of attrNames) {
+                    // TODO: bind:*=""
+                    if (attrName.startsWith('bind:')) {
+                        // Binding!
+                        const bindingId = `webpp-binding-${uuid()}`
+                        const propToBindTo = attrName.substring(5)
+                        const stateToBindFrom = element.getAttribute(attrName)
+
+                        // Add binding id
+                        element.setAttribute(`data-webpp-binding-id-for-prop-${propToBindTo}`, bindingId)
+                        
+                        suffixJs += `
+                            ;(function(){
+                                let __webppcurrentbindingelement = document.querySelector('[data-webpp-binding-id-for-prop-${propToBindTo}="${bindingId}"]');
+                                let __webpp_binding_returned = __WEBPP_CODED_eval('${btoa(stateToBindFrom + '()')}');
+                                __webppcurrentbindingelement.setAttribute('${propToBindTo}', __webpp_binding_returned);
+                                
+                                /* Observe ${propToBindTo} */
+                                window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webpp_binding_returned;
+                                setInterval(function(){
+                                    if (window['____WEBPP__lastObservation_FOR_${bindingId}'] !== __webppcurrentbindingelement['${propToBindTo}']) {
+                                        /* Change!!! */
+                                        window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webppcurrentbindingelement['${propToBindTo}'];
+                                        __WEBPP_CODED_eval(btoa('${stateToBindFrom}.set(window["____WEBPP__lastObservation_FOR_${bindingId}"])'));
+                                    }
+                                }, 25)
+
+                                /* Create an effect for the state */
+                                ;${stateToBindFrom}.__webpp_jsy_effect(function(v,oldv){
+                                    window['____WEBPP__lastObservation_FOR_${bindingId}'] = v;
+                                    __webppcurrentbindingelement['${propToBindTo}'] = v;
+                                });
+                            })();
+                        `
+
+                        // Remove attribute
+                        element.removeAttribute(attrName)
+                        continue
+                    }
+
+                    // Get attr value
+                    const attrValue = element.getAttribute(attrName)
+
+                    // Set attr
+                    element.setAttribute(attrName, attrValue.replace(/^{{(.*?)}}$/gms, (match, jsy) => {
+                        jsy = jsy.trim()
+                        const id = uuid()
+                        const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
+
+                        element.setAttribute(`data-webpp-jsy-out-on-attr-for-${attrName}`, id)
+
+                        suffixJs += `
+                            ;(function(){
+                                let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-on-attr-for-${attrName}="${id}"]');
+                                let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
+                                if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                                    /* It's a state */
+                                    __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                                }
+                                if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
+                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned.__webpp_jsy_getter());
+                                    __webpp_jsy_returned.__webpp_jsy_effect(function(v,oldv){
+                                        __webppcurrentjsyelement.setAttribute("${attrName}", v);
+                                    });
+                                } else {
+                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned);
+                                }
+                            })();
+                        `
+
+                        return ''
+                    }))
+                }
+            }
+
             // Create html from DOM
             return `
             ${vdom.window.document.querySelector('head').innerHTML}
@@ -564,10 +732,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         js += jsContent
 
         // Merge mjs and js
-        js = mjs + js
-
-        // Defer js & top level await
-        js = `window.addEventListener("DOMContentLoaded",(async function(){${js}}).bind(window));`
+        js = prejs + mjs + js + suffixJs
 
         // Use Babel to transpile js
         if (!compilerOptions.dev) {
@@ -623,10 +788,10 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         // Singlefile
         if (singleFile) {
-            externalFileHTML = `<style>${css}</style><script>${js}</script>`
+            externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
         } else {
             externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
-            <script src="${pageIdentifier}.js"></script>`
+            <script defer src="${pageIdentifier}.js"></script>`
         }
 
         // Dev scripts to inject
