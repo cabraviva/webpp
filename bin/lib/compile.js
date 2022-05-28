@@ -77,6 +77,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             }, {});
         }
         `
+        let suffixJs = ''
 
         // Read files
         let manifest = ''
@@ -131,6 +132,10 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         // Prejs
         const prejs = `
             /* Start Prejs */
+
+            /* Coded Eval */
+            ;window.__WEBPP_CODED_eval=function evaluate(codedCode){return eval(atob(codedCode));};
+            
             /* useState */
             ;window.useState=function useState(initialValue){
                 let lastValue = initialValue
@@ -159,6 +164,13 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     returnValue.__proto__.useEffect = stateHook.useEffect
                     returnValue.__proto__._effectDependencies = stateHook._effectDependencies
                     returnValue.__proto__.touch = stateHook.touch
+                    returnValue.__proto__.set = function(newValue){
+                        lastValue = value
+                        value = newValue
+                        stateChange()
+                        return getter()
+                    }
+                    returnValue.__proto__.get = getter
 
                     return returnValue
                 }
@@ -167,6 +179,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     lastValue = value
                     value = newValue
                     stateChange()
+                    return getter()
                 }
                 getter.__proto__.get = () => value
                 getter.__proto__.useEffect = stateHook.useEffect
@@ -185,6 +198,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
                 return stateHook                
             };
+
             /* End   Prejs */
         `
 
@@ -420,6 +434,25 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 }
             }
 
+            function btoa (str) {
+                return Buffer.from(str).toString('base64')
+            }
+
+            // Reactivity
+            vdom.window.document.body.innerHTML = (' ' + vdom.window.document.body.innerHTML).replace(/([^"]){{(.*?)}}/gms, (match, c1, jsy) => {
+                jsy = jsy.trim()
+                const id = uuid()
+
+                suffixJs += `
+                    ;(function(){
+                        let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-id="${id}"]');
+                        __webppcurrentjsyelement.innerHTML = __WEBPP_CODED_eval('${btoa(jsy)}');
+                    })();
+                `
+
+                return `${c1}<span data-webpp-jsy-out-id="${id}"></span>`
+            })
+
             // Create html from DOM
             return `
             ${vdom.window.document.querySelector('head').innerHTML}
@@ -624,7 +657,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         js += jsContent
 
         // Merge mjs and js
-        js = prejs + mjs + js
+        js = prejs + mjs + js + suffixJs
 
         // Use Babel to transpile js
         if (!compilerOptions.dev) {
