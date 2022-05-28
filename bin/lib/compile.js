@@ -158,33 +158,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     stateHook.touch()
                 }
 
-                const getter = () => {
-                    let returnValue = value
-
-                    returnValue.__proto__.useEffect = stateHook.useEffect
-                    returnValue.__proto__._effectDependencies = stateHook._effectDependencies
-                    returnValue.__proto__.touch = stateHook.touch
-                    returnValue.__proto__.set = function(newValue){
-                        lastValue = value
-                        value = newValue
-                        stateChange()
-                        return getter()
-                    }
-                    returnValue.__proto__.get = getter
-
-                    return returnValue
-                }
-
-                getter.__proto__.set = function(newValue){
-                    lastValue = value
-                    value = newValue
-                    stateChange()
-                    return getter()
-                }
-                getter.__proto__.get = () => value
-                getter.__proto__.useEffect = stateHook.useEffect
-                getter.__proto__._effectDependencies = stateHook._effectDependencies
-                getter.__proto__.touch = stateHook.touch
+                const getter = () => value
 
                 const setter = newValue => {
                     lastValue = value
@@ -192,6 +166,14 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     stateChange()
                     return value
                 }
+
+                getter.set = (newValue) => setter(newValue)
+                getter.get = () => getter()
+                getter.useEffect = stateHook.useEffect
+                getter._effectDependencies = stateHook._effectDependencies
+                getter.touch = stateHook.touch
+                getter.__webpp_jsy_getter = getter.get
+                getter.__webpp_jsy_setter = getter.set
 
                 stateHook[0] = getter
                 stateHook[1] = setter
