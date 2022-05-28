@@ -455,6 +455,43 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
                 for (const attrName of attrNames) {
                     // TODO: bind:*=""
+                    if (attrName.startsWith('bind:')) {
+                        // Binding!
+                        const bindingId = `webpp-binding-${uuid()}`
+                        const propToBindTo = attrName.substring(5)
+                        const stateToBindFrom = element.getAttribute(attrName)
+
+                        // Add binding id
+                        element.setAttribute(`data-webpp-binding-id-for-prop-${propToBindTo}`, bindingId)
+                        
+                        suffixJs += `
+                            ;(function(){
+                                let __webppcurrentbindingelement = document.querySelector('[data-webpp-binding-id-for-prop-${propToBindTo}="${bindingId}"]');
+                                let __webpp_binding_returned = __WEBPP_CODED_eval('${btoa(stateToBindFrom + '()')}');
+                                __webppcurrentbindingelement.setAttribute('${propToBindTo}', __webpp_binding_returned);
+                                
+                                /* Observe ${propToBindTo} */
+                                window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webpp_binding_returned;
+                                setInterval(function(){
+                                    if (window['____WEBPP__lastObservation_FOR_${bindingId}'] !== __webppcurrentbindingelement['${propToBindTo}']) {
+                                        /* Change!!! */
+                                        window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webppcurrentbindingelement['${propToBindTo}'];
+                                        __WEBPP_CODED_eval(btoa('${stateToBindFrom}.set(window["____WEBPP__lastObservation_FOR_${bindingId}"])'));
+                                    }
+                                }, 25)
+
+                                /* Create an effect for the state */
+                                ;${stateToBindFrom}.__webpp_jsy_effect(function(v,oldv){
+                                    window['____WEBPP__lastObservation_FOR_${bindingId}'] = v;
+                                    __webppcurrentbindingelement['${propToBindTo}'] = v;
+                                });
+                            })();
+                        `
+
+                        // Remove attribute
+                        element.removeAttribute(attrName)
+                        continue
+                    }
 
                     // Get attr value
                     const attrValue = element.getAttribute(attrName)
