@@ -978,13 +978,13 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         const AnsiConvert = require('ansi-to-html')
         const ansiConverter = new AnsiConvert()
-        const parsedErrMessage = ansiConverter.toHtml(err.message
+        const parsedErrMessage = ansiConverter.toHtml((err.message || '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/\n/g, '<br>'))
         
-        const parsedErrStack = ansiConverter.toHtml(err.stack
+        const parsedErrStack = ansiConverter.toHtml((err.stack || '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
