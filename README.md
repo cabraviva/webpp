@@ -16,7 +16,7 @@ A lightweight preprocessor for web projects
 - [X] Bundle your inline stylesheets and scripts into a single file
 - [ ] Use react like reactivity
 - [X] Use @event in your HTML to listen to events
-- [ ] Caching System for super speed builds
+- [X] Caching System for super speed builds
 - [X] Super fast dev builds & slow, but ultra compatible production builds
 - [X] Live Reloading in Dev Mode
 
