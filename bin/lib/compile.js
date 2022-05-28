@@ -788,7 +788,16 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         // Singlefile
         if (singleFile) {
-            externalFileHTML = `<style>${css}</style><script defer>${js}</script>`
+            const dataUrlFromCss = (cssString) => {
+                const base64 = Buffer.from(cssString).toString('base64')
+                return `data:text/css;base64,${base64}`
+            }
+            const dataUrlFromJs = (jsString) => {
+                const base64 = Buffer.from(jsString).toString('base64')
+                return `data:application/javascript;base64,${base64}`
+            }
+            externalFileHTML = `<link rel="stylesheet" href="${dataUrlFromCss(css)}">
+            <script src="${dataUrlFromJs(js)}" defer></script>`
         } else {
             externalFileHTML = `<link rel="stylesheet" href="${pageIdentifier}.css">
             <script defer src="${pageIdentifier}.js"></script>`
@@ -904,6 +913,8 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         // Write outputs
         if (singleFile) {
             await fs.promises.writeFile(htmlPath, html)
+            try { fs.unlinkSync(cssPath) } catch {}
+            try { fs.unlinkSync(jsPath) } catch {}
         } else {
             await fs.promises.writeFile(htmlPath, html)
             await fs.promises.writeFile(cssPath, css)
