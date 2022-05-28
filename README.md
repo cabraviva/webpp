@@ -14,7 +14,7 @@ A lightweight preprocessor for web projects
 - [X] Don't link your stylesheets and scripts to your html, they are already included
 - [X] Use components in your HTML
 - [X] Bundle your inline stylesheets and scripts into a single file
-- [ ] Use vue like reactivity
+- [ ] Use react like reactivity
 - [X] Use @event in your HTML to listen to events
 - [ ] Caching System for super speed builds
 - [X] Super fast dev builds & slow, but ultra compatible production builds

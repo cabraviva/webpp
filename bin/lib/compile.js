@@ -12,6 +12,7 @@ const parseTypeScript = require('./parseTypeScript')
 const scopeStyle = require('./scopeStyle')
 const { parseProps, stringifyProps } = require('./props-parser')
 const { getWebppFolders } = require('./webpp-folder')
+const { cacheContentType } = require('./validationCache')
 const resolveLibrary = require('./resolve-lib')
 
 const os = require('os')
@@ -22,6 +23,8 @@ const fetchedJsDir = path.join(libcachedir, '.__fetchedjs__')
 const fetchedCssDir = path.join(libcachedir, '.__fetchedcss__')
 const isValidNPMPackageDir = path.join(libcachedir, '.__isvalidnpmpackage__')
 const isValidURLDir = path.join(libcachedir, '.__isvalidurl__')
+const contentTypeCacheDir = path.join(cacheDir, '.__contenttypecache__')
+const fetchedAndDetectedDir = path.join(libcachedir, '.__fetched__and__detected__')
 const cachify = require('./cachify')
 
 if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir)
@@ -30,6 +33,8 @@ if (!fs.existsSync(fetchedJsDir)) fs.mkdirSync(fetchedJsDir)
 if (!fs.existsSync(fetchedCssDir)) fs.mkdirSync(fetchedCssDir)
 if (!fs.existsSync(isValidNPMPackageDir)) fs.mkdirSync(isValidNPMPackageDir)
 if (!fs.existsSync(isValidURLDir)) fs.mkdirSync(isValidURLDir)
+if (!fs.existsSync(contentTypeCacheDir)) fs.mkdirSync(contentTypeCacheDir)
+if (!fs.existsSync(fetchedAndDetectedDir)) fs.mkdirSync(fetchedAndDetectedDir)
 
 async function compilePage (pagePath, parent, projectdir, compilerOptions = { dev: false }) {
     // Do not compile if already compiling
@@ -228,7 +233,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             `
 
             // Get template
-            let template = componentDOM.window.document.querySelector('template').innerHTML
+            let template = (componentDOM.window.document.querySelector('template') || { innerHTML: '<h1>Add a template tag to display content!</h1>' }).innerHTML
 
             // Replace #({ PROP }) in the template with props
             template = template.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
@@ -341,14 +346,16 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 `
             },
             fetchAndDetectType: async (url) => {
-                const response = await axios.get(url)
-                const type = response.headers['content-type'].includes('css') ? 'css' : 'js'
+                const type = await cacheContentType(url)
+                const sanitizedURL = url.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                const response = await cachify(fetchedAndDetectedDir, `__FADCACHE__${sanitizedURL}`, url)
+
                 if (type === 'js') {
                     mjs += `
                     /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
                     ;(function m(){
 
-                    ${response.data}
+                    ${response}
 
                     }).bind(window)();
                     /* End of ${lib} */
@@ -356,7 +363,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 } else if (type === 'css') {
                     css += `
                     /* Beginning of ${lib} which was fetched from ${url} at ${new Date()} */
-                    ${response.data}
+                    ${response}
                     /* End of ${lib} */
                     `
                 }
@@ -563,7 +570,9 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     var data = JSON.parse(e.data);
                     
                     if (data.action === "PAGE_RELOAD") {
-                        location.reload();
+                        setTimeout(function rlPage(){
+                            location.reload();
+                        },200);
                     } else if (data.action === "CONSOLE_LOG") {
                         console.log(data.message);
                     }

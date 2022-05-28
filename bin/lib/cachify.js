@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const axios = require('axios')
 
 module.exports = async function cachify(dir, cname, url) {
     const fetchIt = async function fetchIt() {

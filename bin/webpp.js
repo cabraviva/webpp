@@ -25,9 +25,25 @@ async function useWatcher (firstCompileCallback = () => {}) {
         console.log(chalk.cyan('Watching for changes...'))
     })
 
-    watcher.on('change', async (path) => {
+    const whandler = async (path) => {
         // Return if file doesn't include '.webpp'
-        if (!path.includes('.webpp')) return
+        if (!path.includes('.webpp')) {
+            // If path includes @Components, recompile all pages
+            if (path.includes('@Components')) {
+                // deepcode ignore ExpectsArray: It will work though
+                await compile(argvString, { dev: true }, '*')
+
+                if (isFirstCompilation) {
+                    isFirstCompilation = false
+                    firstCompileCallback()
+                }
+
+                return
+            }
+
+            // Else return
+            return
+        }
 
         await compile(argvString, { dev: true }, [path])
 
@@ -35,31 +51,13 @@ async function useWatcher (firstCompileCallback = () => {}) {
             isFirstCompilation = false
             firstCompileCallback()
         }
-    })
+    }
 
-    watcher.on('unlink', async (path) => {
-        // Return if file doesn't include '.webpp'
-        if (!path.includes('.webpp')) return
+    watcher.on('change', whandler)
 
-        await compile(argvString, { dev: true }, [path])
+    watcher.on('unlink', whandler)
 
-        if (isFirstCompilation) {
-            isFirstCompilation = false
-            firstCompileCallback()
-        }
-    })
-
-    watcher.on('add', async (path) => {
-        // Return if file doesn't include '.webpp'
-        if (!path.includes('.webpp')) return
-
-        await compile(argvString, { dev: true }, [path])
-
-        if (isFirstCompilation) {
-            isFirstCompilation = false
-            firstCompileCallback()
-        }
-    })
+    watcher.on('add', whandler)
 
     watcher.on('error', (error) => {
         console.log(chalk.red('Error: ' + error))
@@ -81,6 +79,7 @@ async function useWatcher (firstCompileCallback = () => {}) {
 
     process.on('uncaughtException', (error) => {
         console.log(chalk.red('Error: ' + error))
+        throw error
     })
 }
 
@@ -98,7 +97,7 @@ function useDevServer () {
 
     app.listen(port, () => {
         const open = require('open')
-        open(`http://localhost:${port}`)
+        setTimeout(() => open(`http://localhost:${port}`), 500)
     })
 }
 
