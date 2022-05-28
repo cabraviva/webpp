@@ -174,6 +174,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 getter.touch = stateHook.touch
                 getter.__webpp_jsy_getter = getter.get
                 getter.__webpp_jsy_setter = getter.set
+                getter.__webpp_jsy_effect = stateHook.useEffect
 
                 stateHook[0] = getter
                 stateHook[1] = setter
