@@ -13,9 +13,20 @@ const scopeStyle = require('./scopeStyle')
 const { parseProps, stringifyProps } = require('./props-parser')
 const { getWebppFolders } = require('./webpp-folder')
 const { cacheContentType } = require('./validationCache')
+const axios = require('axios')
 const resolveLibrary = require('./resolve-lib')
 function btoa(str) {
     return Buffer.from(str).toString('base64')
+}
+
+String.prototype.replaceAsync = async function (regex, asyncFn) {
+    const promises = []
+    this.replace(regex, (match, ...args) => {
+        const promise = asyncFn(match, ...args)
+        promises.push(promise)
+    })
+    const data = await Promise.all(promises)
+    return this.replace(regex, () => data.shift())
 }
 
 const os = require('os')
@@ -157,6 +168,33 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         let libHead = ''
         let mjs = ''
         let libsToInclude = manifest.use || []
+
+        // Embedd Google Fonts
+        if (manifest.fonts) {
+            if (!fs.existsSync(path.join(projectdir, 'fonts'))) fs.mkdirSync(path.join(projectdir, 'fonts'))
+            if (!Array.isArray(manifest.fonts)) manifest.fonts = [manifest.fonts]
+
+            for (const fontURL of manifest.fonts) {
+                const fontName = fontURL.replace(/(.*?)family=(.*?)(&|$)/, (_1, _2, f, _3) => f.replace(/[+\s]/g, '-'))
+                let fontAPIResponse = (await axios.get(fontURL)).data
+
+                fontAPIResponse = await fontAPIResponse.replaceAsync(/url\((.*?).(ttf|woff2)\)/g, async (match, urlWithoutExtension, extension) => {
+                    const fontPath = path.join(projectdir, 'fonts', `${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension}`)
+
+                    if (fs.existsSync(fontPath)) return `url(/fonts/${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension})`
+
+                    // Make a request to the font URL and save it to the font directory
+                    const resp = await axios.get(`${urlWithoutExtension}.${extension}`, { responseType: 'arraybuffer' })
+                    // deepcode ignore PT: Snyk is such a shitty thing, IDK why I'm using it
+                    fs.writeFileSync(fontPath, resp.data)
+
+                    return `url(/fonts/${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension})`
+                })
+
+                // Add it to css
+                css += `${fontAPIResponse}`
+            }
+        }
 
         // Prejs
         const prejs = `
@@ -974,6 +1012,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             })
         }
     } catch (err) {
+        throw err
         console.log(chalk.red(`Error compiling ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))}`))
 
         const AnsiConvert = require('ansi-to-html')

@@ -19,6 +19,7 @@ A lightweight preprocessor for web projects
 - [X] Caching System for super speed builds
 - [X] Super fast dev builds & slow, but ultra compatible production builds
 - [X] Live Reloading in Dev Mode
+- [X] Embedd Google Fonts easier
 
 # Why webpp?
 I created webpp because I wanted:
