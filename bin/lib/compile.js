@@ -103,6 +103,14 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         let html = ''
         let css = ''
         let js = `
+        ;window.__WebPPComponentObj__=${JSON.stringify({
+            a: {
+                name: 'A',
+                template: '<div><i>I\'m the "A" Component</i></div>',
+                stylesheetTemplate: '#({ prop1 })',
+                scriptTemplate: 'console.log("A COMPONENT!")'
+            }
+        })};
         ;window.__MountedWebPPComponents__={};
         function __WEBPP_HELPER_mergeObjects() {
             for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
@@ -175,20 +183,21 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             if (!Array.isArray(manifest.fonts)) manifest.fonts = [manifest.fonts]
 
             for (const fontURL of manifest.fonts) {
-                const fontName = fontURL.replace(/(.*?)family=(.*?)(&|$)/, (_1, _2, f, _3) => f.replace(/[+\s]/g, '-'))
-                let fontAPIResponse = (await axios.get(fontURL)).data
+                const sanitizedFontURL = fontURL.trim().replace(/@/g, '-at-').replace(/:/g, '-col-').replace(/\//g, '-slsh-').replace(/\\/g, '-bslsh-').replace(/[^a-zA-Z0-9_]/g, '')
+                let fontAPIResponse = await cachify(cacheDir, `__gfontresp__${sanitizedFontURL}`, fontURL)
 
                 fontAPIResponse = await fontAPIResponse.replaceAsync(/url\((.*?).(ttf|woff2)\)/g, async (match, urlWithoutExtension, extension) => {
-                    const fontPath = path.join(projectdir, 'fonts', `${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension}`)
+                    const memid = urlWithoutExtension.split('/').pop()
+                    const fontPath = path.join(projectdir, 'fonts', `${memid}.${extension}`)
 
-                    if (fs.existsSync(fontPath)) return `url(/fonts/${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension})`
+                    if (fs.existsSync(fontPath)) return `url(/fonts/${memid}.${extension})`
 
                     // Make a request to the font URL and save it to the font directory
                     const resp = await axios.get(`${urlWithoutExtension}.${extension}`, { responseType: 'arraybuffer' })
                     // deepcode ignore PT: Snyk is such a shitty thing, IDK why I'm using it
                     fs.writeFileSync(fontPath, resp.data)
 
-                    return `url(/fonts/${fontName.replace(/(.*)display(.*?)$/, '$1')}.${extension})`
+                    return `url(/fonts/${memid}.${extension})`
                 })
 
                 // Add it to css
@@ -248,6 +257,124 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
                 return stateHook                
             };
+
+            /* Component Helpers */
+            ;window.__webpphelpersstringifyprops=function stringifyProps(propsObj) {
+                const propsArr = []
+                for (const prop in propsObj) {
+                    propsArr.push(\`\${ prop }="\${propsObj[prop]}"\`)
+                }
+                return propsArr.join(' ')
+            };
+            ;window.__webpphelpersparseprops=function parseProps(propsStr) {
+                propsStr = propsStr.trim()
+
+                const HELPER = '__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu$IJUHjiehuikajhujaikju____'
+
+                // PROPS FORMAT: key="value" key2="value2" key3='value3'
+
+                propsStr = propsStr.replace(/"(.*?)"/g, function (match, $inl) {
+                    return \`"\${$inl.replace(/\s/g, HELPER)}"\`
+                })
+
+                propsStr = propsStr.replace(/'(.*?)'/g, function (match, $inl) {
+                    return \`"\${$inl.replace(/\s/g, HELPER)}"\`
+                })
+
+                const props = {}
+                const propsArr = propsStr.split(' ')
+                for (const prop of propsArr) {
+                    const propArr = prop.split('=')
+                    if (propArr.length === 2) {
+                        props[propArr[0].trim()] = propArr[1].replace(/__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu\$IJUHjiehuikajhujaikju____/g, ' ').trim()
+                        props[propArr[0].trim()] = props[propArr[0].trim()].substring(1, props[propArr[0].trim()].length - 1)
+                    } else {
+                        props[propArr[0].trim()] = propArr.slice(1).join('=').replace(/__WHITESPACE_HELPER_FROM_WEBPP_TO_MAKE_SURE_THAT_THERE_ARE_NO_SPACES__HASH_VALUE_______GZuiokjuhzugds8uIJHUzsu8i9djiuiUZij4hu\$IJUHjiehuikajhujaikju____/g, ' ').trim()
+                        props[propArr[0].trim()] = props[propArr[0].trim()].substring(1, props[propArr[0].trim()].length - 1)
+                    }
+                }
+
+                return props
+            };
+
+            /* UUIDS */
+            window.__webpp_helper_gen_uuidv4=new function() {
+                function generateNumber(limit) {
+                    var value = limit * Math.random();
+                    return value | 0;
+                }
+
+                function generateX() {
+                    var value = generateNumber(16);
+                    return value.toString(16);
+                }
+
+                function generateXes(count) {
+                    var result = '';
+                    for(var i = 0; i < count; ++i) {
+                        result += generateX();
+                    }
+                    return result;
+                }
+
+                function generateVariant() {
+                    var value = generateNumber(16);
+                    var variant =  (value & 0x3) | 0x8;
+                    return variant.toString(16);
+                };
+
+                // UUID v4
+                //
+                //   varsion: M=4 
+                //   variant: N
+                //   pattern: xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx
+                //
+                this.generate = function() {
+                    var result = generateXes(8)
+                        + '-' + generateXes(4)
+                        + '-' + '4' + generateXes(3)
+                        + '-' + generateVariant() + generateXes(3)
+                        + '-' + generateXes(12)
+                    return result;
+                };
+            };
+
+            /* Component Class */
+            ;window.WebppComponent = class WebppComponent {
+                constructor (componentName, props) {
+                    if (typeof props !== 'object') props = {}
+                    const componentFromComponentList = window.__WebPPComponentObj__[componentName]
+                    if (!componentFromComponentList) throw new Error(\`Component \${componentName} not found! Try creating a "\${componentName}.html" file in your "@Components" folder!\`)
+                    this.__template = componentFromComponentList
+                    this.invokeSyntax = \`<\${componentName}\${__webpphelpersstringifyprops(props) ? ' ' + __webpphelpersstringifyprops(props) : ''} />\`
+                    this.props = props
+
+                    const tmpstyle = this.__template.stylesheetTemplate || ''
+                    const css = tmpstyle.replace(/#\\({(.*?)}\\)/g, function (_match, propKey) {
+                        return props[propKey.trim()]
+                    })
+                    this.css = css
+
+                    this.id = __webpp_helper_gen_uuidv4.generate()
+                }
+
+                _getHTMLString () {
+                    return \`\`
+                }
+
+                get outerHTML () {
+                    return this._getHTMLString()
+                }
+
+                get innerHTML () {
+                    return this._getHTMLString()
+                }
+
+                toString () {
+                    return this._getHTMLString()
+                }
+            };
+            ;document.createComponent=(componentName, props)=>new WebppComponent(componentName, props);
 
             /* End   Prejs */
         `
