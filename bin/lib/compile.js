@@ -298,45 +298,40 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             };
 
             /* UUIDS */
-            window.__webpp_helper_gen_uuidv4=new function() {
-                function generateNumber(limit) {
-                    var value = limit * Math.random();
-                    return value | 0;
+            ;window.__webpp_helper_gen_uuidv4=new function(){function n(n){return 0|n*Math.random()}function t(t){for(var r="",e=0;e<t;++e)r+=n(16).toString(16);return r}this.generate=function(){return t(8)+"-"+t(4)+"-4"+t(3)+"-"+(3&n(16)|8).toString(16)+t(3)+"-"+t(12)}};
+
+            /* VirtualDOM / Sandbox */
+            ;window.__WebppSandbox=class Sandbox{
+                constructor(){
+                    this.box = document.createElement('html')
+                    this.box.append(document.createElement('head'))
+                    this.box.append(document.createElement('body'))
+
                 }
 
-                function generateX() {
-                    var value = generateNumber(16);
-                    return value.toString(16);
+                querySelector (selector) {
+                    return this.box.querySelector(selector)
                 }
 
-                function generateXes(count) {
-                    var result = '';
-                    for(var i = 0; i < count; ++i) {
-                        result += generateX();
-                    }
-                    return result;
+                querySelectorAll (selector) {
+                    return this.box.querySelectorAll(selector)
                 }
 
-                function generateVariant() {
-                    var value = generateNumber(16);
-                    var variant =  (value & 0x3) | 0x8;
-                    return variant.toString(16);
-                };
+                get body () {
+                    return this.box.querySelector('body')
+                }
 
-                // UUID v4
-                //
-                //   varsion: M=4 
-                //   variant: N
-                //   pattern: xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx
-                //
-                this.generate = function() {
-                    var result = generateXes(8)
-                        + '-' + generateXes(4)
-                        + '-' + '4' + generateXes(3)
-                        + '-' + generateVariant() + generateXes(3)
-                        + '-' + generateXes(12)
-                    return result;
-                };
+                setContent (content) {
+                    this.body.innerHTML = content
+                }
+
+                getContent () {
+                    return this.body.innerHTML
+                }
+
+                exportHTML () {
+                    return this.getContent()
+                }
             };
 
             /* Component Class */
@@ -355,7 +350,13 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     })
                     this.css = css
 
-                    this.id = __webpp_helper_gen_uuidv4.generate()
+                    this.componentId = \`webpp-\${componentName.replace(/\\//g, '---slash---').replace(/[^a-zA-Z0-9]/g, '-')}-component-\${__webpp_helper_gen_uuidv4.generate()}\`;
+
+                    this.id = __webpp_helper_gen_uuidv4.generate();
+
+                    const sandbox = new __WebppSandbox()
+                    sandbox.setContent(this.__template.template)
+                    this.sandbox = sandbox
                 }
 
                 _getHTMLString () {
@@ -370,7 +371,15 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     return this._getHTMLString()
                 }
 
+                _execJs () {
+                    eval(this.__template.scriptTemplate)
+                }
+
                 toString () {
+                    let p = this
+                    setTimeout(function(){
+                        p._execJs()
+                    },5)
                     return this._getHTMLString()
                 }
             };
