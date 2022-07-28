@@ -342,6 +342,12 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     eval(this.__template.scriptTemplate)
                 }
 
+                _applyCss () {
+                    const style = document.createElement('style')
+                    style.innerHTML = this.css
+                    document.head.appendChild(style)
+                }
+
                 toString () {
                     let p = this
                     setTimeout(function(){
@@ -357,7 +363,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
         // Render components
         // Components are saved in the @Components folder in the projectdir
-        function parseComponents ($content) {
+        const parseComponents = function parseComponents ($content) {
             return $content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
                 const componentName = inlineComponent.split(' ')[0]
                 const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
@@ -543,7 +549,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             })
         }
 
-        function parseHTML_(htc) {
+        const parseHTML_ = function parseHTML_(htc) {
             // Parse Components
             htc = parseComponents(htc)
 
@@ -620,7 +626,6 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 const attrNames = element.getAttributeNames()
 
                 for (const attrName of attrNames) {
-                    // TODO: bind:*=""
                     if (attrName.startsWith('bind:')) {
                         // Binding!
                         const bindingId = `webpp-binding-${uuid()}`
