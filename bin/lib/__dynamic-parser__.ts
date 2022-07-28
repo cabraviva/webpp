@@ -1,6 +1,6 @@
 const parseHTML = function parseHTML(htc) {
     const parseComponents = function parseComponents($content, subscribeToRenderEvent) {
-        return $content.replace(/<(.*)\/>/g, function (match, inlineComponent) {
+        return $content.replace(/<(.*)\\/>/g, function (match, inlineComponent) {
             const componentName = inlineComponent.split(' ')[0]
             const componentPropsString = inlineComponent.split(' ').slice(1).join(' ').trim()
             // @ts-ignore: Already included in prejs
@@ -54,25 +54,25 @@ const parseHTML = function parseHTML(htc) {
             if (attrName.startsWith('@')) {
                 // Assign a id
                 // @ts-ignore: Already included in prejs
-                const uniqueElementId = `webpp-element-with-id-${__webpp_helper_gen_uuidv4.generate()}-${__webpp_helper_gen_uuidv4.generate()}`
+                const uniqueElementId = \`webpp-element-with-id-\${__webpp_helper_gen_uuidv4.generate()}-\${__webpp_helper_gen_uuidv4.generate()}\`
 
                 // Add the id to the element as [data-webpp-element-id]
-                element.setAttribute(`data-webpp-element-id`, uniqueElementId)
+                element.setAttribute(\`data-webpp-element-id\`, uniqueElementId)
 
                 // Add js for the event listener
-                js += `
-                        /* Begin JS for event listener ${attrName} */
+                js += \`
+                        /* Begin JS for event listener \${attrName} */
                         ;(function _(){
                             // Get the element
-                            let __webppcelement=document.querySelector("[data-webpp-element-id='${uniqueElementId}']");
+                            let __webppcelement=document.querySelector("[data-webpp-element-id='\${uniqueElementId}']");
                             // Add event listener
-                            __webppcelement.addEventListener("${attrName.substring(1)}",function(event){
+                            __webppcelement.addEventListener("\${attrName.substring(1)}",function(event){
                                 ;let target=__webppcelement;
-                                ;${element.getAttribute(attrName)};
+                                ;\${element.getAttribute(attrName)};
                             });
                         }).bind(window)();
-                        /* End JS for event listener ${attrName} */
-                        `
+                        /* End JS for event listener \${attrName} */
+                        \`
 
                 // Remove the attribute
                 element.removeAttribute(attrName)
@@ -87,15 +87,15 @@ const parseHTML = function parseHTML(htc) {
         jsy = jsy.trim()
         // @ts-ignore: Already included in prejs
         const id = __webpp_helper_gen_uuidv4.generate()
-        const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
+        const jsyIsUsedAsFunction = !!jsy.match(/\\((.*?)\\)$/)
 
-        suffixJs += `
+        suffixJs += \`
                     ;(function(){
-                        let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-id="${id}"]');
-                        let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
-                        if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                        let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-id="\${id}"]');
+                        let __webpp_jsy_returned = __WEBPP_CODED_eval('\${btoa(jsy)}');
+                        if (\${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('\${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
                             /* It's a state */
-                            __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                            __webpp_jsy_returned = __WEBPP_CODED_eval('\${btoa(jsy.substring(0, jsy.length - 2))}');
                         }
                         if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
                             __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned.__webpp_jsy_getter();
@@ -106,9 +106,9 @@ const parseHTML = function parseHTML(htc) {
                             __webppcurrentjsyelement.innerHTML = __webpp_jsy_returned;
                         }
                     })();
-                `
+                \`
 
-        return `${c1}<span data-webpp-jsy-out-id="${id}"></span>`
+        return \`\${c1}<span data-webpp-jsy-out-id="\${id}"></span>\`
     })
     // Attributes
     for (const element of vdom.window.document.querySelectorAll('*')) {
@@ -118,36 +118,36 @@ const parseHTML = function parseHTML(htc) {
             if (attrName.startsWith('bind:')) {
                 // Binding!
                 // @ts-ignore: Already included in prejs
-                const bindingId = `webpp-binding-${__webpp_helper_gen_uuidv4.generate()}`
+                const bindingId = \`webpp-binding-\${__webpp_helper_gen_uuidv4.generate()}\`
                 const propToBindTo = attrName.substring(5)
                 const stateToBindFrom = element.getAttribute(attrName)
 
                 // Add binding id
-                element.setAttribute(`data-webpp-binding-id-for-prop-${propToBindTo}`, bindingId)
+                element.setAttribute(\`data-webpp-binding-id-for-prop-\${propToBindTo}\`, bindingId)
 
-                suffixJs += `
+                suffixJs += \`
                             ;(function(){
-                                let __webppcurrentbindingelement = document.querySelector('[data-webpp-binding-id-for-prop-${propToBindTo}="${bindingId}"]');
-                                let __webpp_binding_returned = __WEBPP_CODED_eval('${btoa(stateToBindFrom + '()')}');
-                                __webppcurrentbindingelement.setAttribute('${propToBindTo}', __webpp_binding_returned);
+                                let __webppcurrentbindingelement = document.querySelector('[data-webpp-binding-id-for-prop-\${propToBindTo}="\${bindingId}"]');
+                                let __webpp_binding_returned = __WEBPP_CODED_eval('\${btoa(stateToBindFrom + '()')}');
+                                __webppcurrentbindingelement.setAttribute('\${propToBindTo}', __webpp_binding_returned);
                                 
-                                /* Observe ${propToBindTo} */
-                                window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webpp_binding_returned;
+                                /* Observe \${propToBindTo} */
+                                window['____WEBPP__lastObservation_FOR_\${bindingId}'] = __webpp_binding_returned;
                                 setInterval(function(){
-                                    if (window['____WEBPP__lastObservation_FOR_${bindingId}'] !== __webppcurrentbindingelement['${propToBindTo}']) {
+                                    if (window['____WEBPP__lastObservation_FOR_\${bindingId}'] !== __webppcurrentbindingelement['\${propToBindTo}']) {
                                         /* Change!!! */
-                                        window['____WEBPP__lastObservation_FOR_${bindingId}'] = __webppcurrentbindingelement['${propToBindTo}'];
-                                        __WEBPP_CODED_eval(btoa('${stateToBindFrom}.set(window["____WEBPP__lastObservation_FOR_${bindingId}"])'));
+                                        window['____WEBPP__lastObservation_FOR_\${bindingId}'] = __webppcurrentbindingelement['\${propToBindTo}'];
+                                        __WEBPP_CODED_eval(btoa('\${stateToBindFrom}.set(window["____WEBPP__lastObservation_FOR_\${bindingId}"])'));
                                     }
                                 }, 25)
 
                                 /* Create an effect for the state */
-                                ;${stateToBindFrom}.__webpp_jsy_effect(function(v,oldv){
-                                    window['____WEBPP__lastObservation_FOR_${bindingId}'] = v;
-                                    __webppcurrentbindingelement['${propToBindTo}'] = v;
+                                ;\${stateToBindFrom}.__webpp_jsy_effect(function(v,oldv){
+                                    window['____WEBPP__lastObservation_FOR_\${bindingId}'] = v;
+                                    __webppcurrentbindingelement['\${propToBindTo}'] = v;
                                 });
                             })();
-                        `
+                        \`
 
                 // Remove attribute
                 element.removeAttribute(attrName)
@@ -162,28 +162,28 @@ const parseHTML = function parseHTML(htc) {
                 jsy = jsy.trim()
                 // @ts-ignore: Already included in prejs
                 const id = __webpp_helper_gen_uuidv4.generate()
-                const jsyIsUsedAsFunction = !!jsy.match(/\((.*?)\)$/)
+                const jsyIsUsedAsFunction = !!jsy.match(/\\((.*?)\\)$/)
 
-                element.setAttribute(`data-webpp-jsy-out-on-attr-for-${attrName}`, id)
+                element.setAttribute(\`data-webpp-jsy-out-on-attr-for-\${attrName}\`, id)
 
-                suffixJs += `
+                suffixJs += \`
                             ;(function(){
-                                let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-on-attr-for-${attrName}="${id}"]');
-                                let __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy)}');
-                                if (${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
+                                let __webppcurrentjsyelement = document.querySelector('[data-webpp-jsy-out-on-attr-for-\${attrName}="\${id}"]');
+                                let __webpp_jsy_returned = __WEBPP_CODED_eval('\${btoa(jsy)}');
+                                if (\${jsyIsUsedAsFunction} && __WEBPP_CODED_eval('\${btoa(jsy.substring(0, jsy.length - 2))}').__webpp_jsy_getter) {
                                     /* It's a state */
-                                    __webpp_jsy_returned = __WEBPP_CODED_eval('${btoa(jsy.substring(0, jsy.length - 2))}');
+                                    __webpp_jsy_returned = __WEBPP_CODED_eval('\${btoa(jsy.substring(0, jsy.length - 2))}');
                                 }
                                 if (__webpp_jsy_returned && typeof __webpp_jsy_returned.__webpp_jsy_getter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_setter === 'function' && typeof __webpp_jsy_returned.__webpp_jsy_effect === 'function') {
-                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned.__webpp_jsy_getter());
+                                    __webppcurrentjsyelement.setAttribute("\${attrName}", __webpp_jsy_returned.__webpp_jsy_getter());
                                     __webpp_jsy_returned.__webpp_jsy_effect(function(v,oldv){
-                                        __webppcurrentjsyelement.setAttribute("${attrName}", v);
+                                        __webppcurrentjsyelement.setAttribute("\${attrName}", v);
                                     });
                                 } else {
-                                    __webppcurrentjsyelement.setAttribute("${attrName}", __webpp_jsy_returned);
+                                    __webppcurrentjsyelement.setAttribute("\${attrName}", __webpp_jsy_returned);
                                 }
                             })();
-                        `
+                        \`
 
                 return ''
             }))
@@ -199,10 +199,10 @@ const parseHTML = function parseHTML(htc) {
     })
 
     // Create html from DOM
-    return [`
-            ${vdom.window.document.querySelector('head').innerHTML}
+    return [\`
+            \${vdom.window.document.querySelector('head').innerHTML}
 
 
-            ${vdom.window.document.querySelector('body').innerHTML}
-    `, js, () => dispatchRenderEvent()]
+            \${vdom.window.document.querySelector('body').innerHTML}
+    \`, js, () => dispatchRenderEvent()]
 }
