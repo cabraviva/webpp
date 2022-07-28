@@ -1330,7 +1330,6 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
             })
         }
     } catch (err) {
-        throw err
         console.log(chalk.red(`Error compiling ${chalk.yellow(pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].substring(0, pagePath.replace(/\\/g, '/').split('/')[pagePath.replace(/\\/g, '/').split('/').length - 1].length - 6))}`))
 
         const AnsiConvert = require('ansi-to-html')
