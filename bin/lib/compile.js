@@ -533,7 +533,16 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
                     this.id = __webpp_helper_gen_uuidv4.generate();
 
+                    this._renderEventListeners = []
                     
+                }
+
+                _subscribeToRenderEvents (handler) {
+                    this._renderEventListeners.push(handler)
+                } 
+
+                _dispatchRenderEvents () {
+                    this._renderEventListeners.forEach(f => f())
                 }
 
                 _getHTMLString () {
@@ -562,6 +571,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     let p = this
                     setTimeout(function(){
                         p._execJs()
+                        p._dispatchRenderEvents()
                     },5)
                     return this._getHTMLString()
                 }
