@@ -103,14 +103,6 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         let html = ''
         let css = ''
         let js = `
-        ;window.__WebPPComponentObj__=${JSON.stringify({
-            a: {
-                name: 'A',
-                template: '<div><i>I\'m the "A" Component</i></div>',
-                stylesheetTemplate: '#({ prop1 })',
-                scriptTemplate: 'console.log("A COMPONENT!")'
-            }
-        })};
         ;window.__MountedWebPPComponents__={};
         function __WEBPP_HELPER_mergeObjects() {
             for (var _len = arguments.length, objs = new Array(_len), _key = 0; _key < _len; _key++) {
@@ -168,6 +160,21 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         if (typeof manifest !== 'object') throw new Error(`Invalid manifest in ${pagePath}`)
         if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
         const singleFile = manifest.singleFile || false
+
+        // Dynamic Components
+        const dynamicComponents = manifest.dynamicComponents || []
+        const componentObjForDynComponents = {}
+        for (const component of dynamicComponents) {
+            componentObjForDynComponents[component] = {
+                name: component,
+                template: '🧪 Not implemented yet',
+                stylesheetTemplate: '/*🧪 Not implemented yet*/',
+                scriptTemplate: 'console.log("🧪 Not implemented yet")'
+            }
+        }
+        js = js + `
+        ;window.__WebPPComponentObj__=${JSON.stringify(componentObjForDynComponents)};
+        `
 
         // Language
         const pageLang = manifest.lang || manifest.language || 'en'
@@ -295,6 +302,18 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 }
 
                 return props
+            };
+
+            /* scopeStyle */
+            ;window.__webpp_helper_scopeStyle=function scopeStyle(css, id) {
+                css = css.replace(/([^\s]*)\s*{/g, (match, selector) => {
+                    // Add the prefix to the selector
+                    selector = \`#\${ id } \${ selector } {\`
+
+                    return selector
+                })
+
+                return css
             };
 
             /* UUIDS */
@@ -567,10 +586,12 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     document.head.appendChild(style)
                 }
 
+                /* A function that is being called to render the HTML. */
                 toString () {
                     let p = this
                     setTimeout(function(){
                         p._execJs()
+                        p._applyCss()
                         p._dispatchRenderEvents()
                     },5)
                     return this._getHTMLString()
