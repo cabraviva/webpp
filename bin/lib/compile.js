@@ -161,16 +161,138 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         if (!Array.isArray(manifest.use)) manifest.use = [ manifest.use ]
         const singleFile = manifest.singleFile || false
 
+        // LibsToInclude
+        global.libsToInclude = []
+
         // Dynamic Components
         const dynamicComponents = manifest.dynamicComponents || []
         const componentObjForDynComponents = {}
-        for (const component of dynamicComponents) {
-            componentObjForDynComponents[component] = {
-                name: component,
-                template: '🧪 Not implemented yet',
-                stylesheetTemplate: '/*🧪 Not implemented yet*/',
-                scriptTemplate: 'console.log("🧪 Not implemented yet")'
+        for (const component_ of dynamicComponents) {
+            global.addDynamicComponent = function addDynamicComponent(component) {
+                // If already precompiled, skip
+                if (component in componentObjForDynComponents) return
+
+                const componentName = component
+                const componentPath = path.join(projectdir, '@Components', component + '.html')
+                // Assign a component id
+                const componentId = `webpp-${componentName.replace(/\//g, '---slash---').replace(/[^a-zA-Z0-9]/g, '-')}-component-${uuid()}`
+                let componentContent = ''
+                try {
+                    componentContent = fs.readFileSync(componentPath).toString('utf8')
+                } catch {
+                    console.warn(chalk.yellow('WARNING: Component ' + componentName + ' not found. Try creating the file "' + componentPath + '"!'))
+                }
+
+                componentContent.replace(/<(.*?) (.*?)(\s*?)\/>/g, (match, elemName, elemProps) => {
+                    global.addDynamicComponent(elemName)
+                    return ''
+                })
+
+                // Local ParseComponents
+                
+                // Create Virtual DOM from component
+                const componentDOM = new JSDOM(componentContent)
+
+                // Get style
+                let style = (componentDOM.window.document.querySelector('style') || { innerHTML: '' }).innerHTML.trim()
+
+                // Replace #({ PROP }) in the style with a temporary placeholder
+                style = style.replace(/#\({(.*?)}\)/g, function (_match, propKey) {
+                    propKey = propKey.trim()
+
+                    return `var(--WEBPP-HELPER-PROP-VALUE-REPLACER-huiajfjsusajhuidjj-${propKey})`
+                })
+
+                // Get lang
+                let lang = (componentDOM.window.document.querySelector('style') || {
+                    getAttribute() {
+                        return 'css'
+                    }
+                }).getAttribute('lang') || 'css'
+
+                if (lang === 'css') {
+                    // Already css, no further step required
+                } else if (lang === 'sass') {
+                    // Convert sass to css
+                    const rsass = style
+                    const fname = path.join(pagePath, `$inlinesheet-${uuid()}.sass`)
+
+                    // Write sass to file
+                    fs.writeFileSync(fname, rsass)
+
+                    // Compile sass
+                    let compiledCss = ''
+                    try {
+                        compiledCss = sass.compile(fname).css
+                    } catch (e) {
+                        fs.unlinkSync(fname)
+                        throw e
+                    }
+
+                    // Replace style with css
+                    style = compiledCss
+
+                    // Remove file
+                    fs.unlinkSync(fname)
+                } else if (lang === 'scss') {
+                    // Convert sass to css
+                    const scss = style
+                    const fname = path.join(pagePath, `$inlinesheet-${uuid()}.scss`)
+
+                    // Write sass to file
+                    fs.writeFileSync(fname, scss)
+
+                    // Compile sass
+                    let compiledCss = ''
+                    try {
+                        compiledCss = sass.compile(fname).css
+                    } catch (e) {
+                        fs.unlinkSync(fname)
+                        throw e
+                    }
+
+                    // Replace style with css
+                    style = compiledCss
+
+                    // Remove file
+                    fs.unlinkSync(fname)
+                } else {
+                    // Unknown lang
+                    console.error(chalk.red(`Unknown stylesheet lang: ${lang}`))
+                }
+
+                // Scope the style
+                style = scopeStyle(style, componentId)
+
+                // Remove prop placeholders
+                style = style.replace(/var\(--WEBPP-HELPER-PROP-VALUE-REPLACER-huiajfjsusajhuidjj-(.*?)\)/g, (m, propKey) => propKey)
+
+                // Get template
+                let template = (componentDOM.window.document.querySelector('template') || { innerHTML: '<h1>Add a template tag to display content!</h1>' }).innerHTML
+
+                // Parse libs
+                let componentLibs = []
+                if (componentDOM.window.document.querySelector('libs') && componentDOM.window.document.querySelector('libs').innerHTML) {
+                    componentLibs = (componentDOM.window.document.querySelector('libs') || { innerHTML: '' }).innerHTML.trim().split(',').map(e => e.trim())
+                }
+                if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
+                global.libsToInclude = global.libsToInclude.concat(componentLibs)
+
+                let componentHTML = `
+                    <div id="${componentId}">
+                        ${template}
+                    </div>
+                `
+                // ........ End ........
+
+                componentObjForDynComponents[component] = {
+                    name: component,
+                    template: componentHTML,
+                    stylesheetTemplate: style
+                }
             }
+
+            addDynamicComponent(component_)
         }
         js = js + `
         ;window.__WebPPComponentObj__=${JSON.stringify(componentObjForDynComponents)};
@@ -182,7 +304,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
         // Embed libraries
         let libHead = ''
         let mjs = ''
-        let libsToInclude = manifest.use || []
+        global.libsToInclude = manifest.use || global.libsToInclude
 
         // Embedd Google Fonts
         if (manifest.fonts) {
@@ -553,6 +675,9 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     this.id = __webpp_helper_gen_uuidv4.generate();
 
                     this._renderEventListeners = []
+
+                    // TODO: Parse HTML & Generate Script
+                    this.__template.scriptTemplate = ''
                     
                 }
 
@@ -565,7 +690,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                 }
 
                 _getHTMLString () {
-                    return \`<i>👽 No Content?</i>\`
+                    return this.__template.template
                 }
 
                 get outerHTML () {
@@ -777,7 +902,7 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
                     componentLibs = (componentDOM.window.document.querySelector('libs') || { innerHTML: '' }).innerHTML.trim().split(',').map(e => e.trim())
                 }
                 if (!Array.isArray(componentLibs)) componentLibs = [componentLibs]
-                libsToInclude = libsToInclude.concat(componentLibs)
+                global.libsToInclude = global.libsToInclude.concat(componentLibs)
 
                 let componentHTML = `
                     <div id="${componentId}">
@@ -953,8 +1078,8 @@ async function compilePage (pagePath, parent, projectdir, compilerOptions = { de
 
 
         // Make sure every element in libs is unique & fetch libs
-        libsToInclude = [...new Set(libsToInclude)]
-        for (let lib of libsToInclude) {
+        global.libsToInclude = [...new Set(global.libsToInclude)]
+        for (let lib of global.libsToInclude) {
             lib = `${lib}`.trim()
 
             await resolveLibrary(lib, projectdir, pagePath, {
